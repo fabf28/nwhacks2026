@@ -10,23 +10,29 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
     const [scannerStarted, setScannerStarted] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const scannerRef = useRef<Html5Qrcode | null>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
+    const stoppingRef = useRef(false); // Prevent double-stop
 
     useEffect(() => {
-        // Cleanup on unmount
         return () => {
-            if (scannerRef.current) {
-                scannerRef.current.stop().catch(() => { });
+            // Cleanup: only stop if not already stopping
+            const scanner = scannerRef.current;
+            if (scanner && !stoppingRef.current) {
+                try {
+                    if (scanner.isScanning) {
+                        stoppingRef.current = true;
+                        scanner.stop().catch(() => { });
+                    }
+                } catch (e) {
+                    // Ignore all errors during cleanup
+                }
             }
         };
     }, []);
 
     const startScanner = async () => {
-        if (!containerRef.current) return;
-
         setError(null);
+        stoppingRef.current = false;
 
-        // Initialize outside of React's control
         const scanner = new Html5Qrcode("qr-reader-element");
         scannerRef.current = scanner;
 
@@ -35,13 +41,24 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
                 { facingMode: "environment" },
                 { fps: 10, qrbox: { width: 250, height: 250 } },
                 (decodedText) => {
-                    scanner.stop().then(() => {
+                    // Prevent multiple stop calls
+                    if (stoppingRef.current) return;
+                    stoppingRef.current = true;
+
+                    const finalize = () => {
+                        scannerRef.current = null;
                         setScannerStarted(false);
                         alert(`Scanned URL: ${decodedText}`);
                         onScanSuccess(decodedText);
-                    }).catch(console.error);
+                    };
+
+                    if (scanner.isScanning) {
+                        scanner.stop().then(finalize).catch(finalize);
+                    } else {
+                        finalize();
+                    }
                 },
-                () => { } // ignore continuous errors
+                () => { } // ignore parse errors
             );
             setScannerStarted(true);
         } catch (err) {
@@ -51,11 +68,15 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
     };
 
     const stopScanner = async () => {
-        if (scannerRef.current) {
+        const scanner = scannerRef.current;
+        if (scanner && !stoppingRef.current) {
+            stoppingRef.current = true;
             try {
-                await scannerRef.current.stop();
+                if (scanner.isScanning) {
+                    await scanner.stop();
+                }
             } catch (e) {
-                console.warn("Stop failed", e);
+                // Ignore
             }
             scannerRef.current = null;
             setScannerStarted(false);
@@ -70,9 +91,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
                     Instantly intercept and analyze URLs embedded in public QR codes.
                 </p>
 
-                {/* Scanner Container */}
                 <div
-                    ref={containerRef}
                     style={{
                         width: '100%',
                         maxWidth: '400px',
@@ -85,10 +104,8 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
                         position: 'relative'
                     }}
                 >
-                    {/* This div is ONLY for html5-qrcode. React will NOT touch its children. */}
                     <div id="qr-reader-element" style={{ width: '100%', height: '100%' }}></div>
 
-                    {/* Overlay for placeholder/error - positioned absolutely over the scanner div */}
                     {!scannerStarted && (
                         <div style={{
                             position: 'absolute',
@@ -96,7 +113,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            pointerEvents: 'none' // Allow clicks to pass through
+                            pointerEvents: 'none'
                         }}>
                             {error ? (
                                 <div style={{ color: 'var(--danger)', textAlign: 'center', padding: '20px' }}>
