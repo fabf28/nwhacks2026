@@ -5,6 +5,7 @@ import { checkSafeBrowsing } from './safeBrowsing';
 import { checkReverseDns } from './reverseDns';
 import { checkPorts } from './portScan';
 import { checkIpReputation } from './ipReputation';
+import { runDockerScan } from './docker/docker';
 import { calculateScore, ScanResult } from './scoring';
 
 export interface ProgressUpdate {
@@ -276,6 +277,47 @@ export async function scanUrl(
         status: 'warning',
       });
     }
+  }
+
+  // Step 9: Docker Sandbox Scan (Network Analysis)
+  onProgress({
+    step: 'dockerScan',
+    message: 'Running sandboxed browser analysis...',
+    status: 'pending',
+  });
+
+  try {
+    const dockerData = await runDockerScan(url);
+    results.checks.dockerScan = dockerData;
+
+    if (!dockerData.success) {
+      onProgress({
+        step: 'dockerScan',
+        message: `Sandbox scan failed: ${dockerData.error || 'Unknown error'}`,
+        status: 'warning',
+        data: dockerData,
+      });
+    } else if (dockerData.suspiciousRequests.length > 0) {
+      onProgress({
+        step: 'dockerScan',
+        message: `Found ${dockerData.suspiciousRequests.length} suspicious network requests`,
+        status: 'error',
+        data: dockerData,
+      });
+    } else {
+      onProgress({
+        step: 'dockerScan',
+        message: `Analyzed ${dockerData.totalRequests} network requests. No threats detected.`,
+        status: 'success',
+        data: dockerData,
+      });
+    }
+  } catch (e) {
+    onProgress({
+      step: 'dockerScan',
+      message: 'Could not run sandbox analysis (is Docker running?)',
+      status: 'warning',
+    });
   }
 
   // Final Step: Calculate final score
