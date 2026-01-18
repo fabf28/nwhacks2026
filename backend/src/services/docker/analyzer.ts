@@ -2,6 +2,7 @@ import {
   SUSPICIOUS_TLDS,
   SUSPICIOUS_PATTERNS,
   MAX_QUERY_STRING_LENGTH,
+  LEGITIMATE_TRACKING_DOMAINS,
 } from './constants';
 
 export interface AnalysisResult {
@@ -21,6 +22,18 @@ export function analyzeRequest(
     const url = new URL(requestUrl);
     const domain = url.hostname;
 
+    // Skip if it's a request to the original domain
+    if (domain === originalDomain || domain.endsWith(`.${originalDomain}`)) {
+      return { isSuspicious: false };
+    }
+
+    // Skip if it's a known legitimate tracking/analytics domain
+    for (const legitDomain of LEGITIMATE_TRACKING_DOMAINS) {
+      if (domain === legitDomain || domain.endsWith(`.${legitDomain}`)) {
+        return { isSuspicious: false };
+      }
+    }
+
     // Check for suspicious TLDs
     for (const tld of SUSPICIOUS_TLDS) {
       if (domain.endsWith(tld)) {
@@ -28,14 +41,15 @@ export function analyzeRequest(
       }
     }
 
-    // Check for suspicious patterns in URL
+    // Check for suspicious patterns in URL (only the path, not the domain)
+    const pathAndQuery = url.pathname + url.search;
     for (const pattern of SUSPICIOUS_PATTERNS) {
-      if (pattern.test(requestUrl)) {
+      if (pattern.test(pathAndQuery)) {
         return { isSuspicious: true, reason: 'Suspicious pattern in URL' };
       }
     }
 
-    // Check for data exfiltration patterns (long query strings)
+    // Check for data exfiltration patterns (very long query strings)
     if (url.search.length > MAX_QUERY_STRING_LENGTH) {
       return {
         isSuspicious: true,
@@ -53,3 +67,4 @@ export function analyzeRequest(
     return { isSuspicious: false };
   }
 }
+

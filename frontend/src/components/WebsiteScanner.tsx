@@ -780,17 +780,61 @@ const WebsiteScanner: React.FC<WebsiteScannerProps> = ({ initialUrl }) => {
                                     <div className="glass-card" style={{ padding: '16px' }}>
                                         {reportData.dockerScan.success ? (
                                             <>
+                                                {reportData.dockerScan.pageTitle && (
+                                                    <ReportRow label="Page Title" value={reportData.dockerScan.pageTitle} />
+                                                )}
                                                 <ReportRow
-                                                    label="Network Requests"
-                                                    value={reportData.dockerScan.suspiciousRequests.length > 0
-                                                        ? `${reportData.dockerScan.suspiciousRequests.length} suspicious`
-                                                        : `${reportData.dockerScan.totalRequests} clean`}
-                                                    color={reportData.dockerScan.suspiciousRequests.length > 0 ? 'var(--danger-red)' : 'var(--success-green)'}
+                                                    label="Network Activity"
+                                                    value={`${reportData.dockerScan.totalRequests} requests`}
                                                 />
-                                                <ReportRow label="Third-Party Domains" value={reportData.dockerScan.thirdPartyDomains.length} />
+                                                <ReportRow
+                                                    label="Suspicious Requests"
+                                                    value={reportData.dockerScan.suspiciousRequests.length > 0
+                                                        ? `${reportData.dockerScan.suspiciousRequests.length} found`
+                                                        : 'None detected'}
+                                                    color={reportData.dockerScan.suspiciousRequests.length > 0 ? 'var(--warning-gold)' : 'var(--success-green)'}
+                                                />
+                                                <ReportRow
+                                                    label="Third-Party Domains"
+                                                    value={reportData.dockerScan.thirdPartyDomains.length}
+                                                />
+
+                                                {/* Show suspicious URLs if any */}
+                                                {reportData.dockerScan.suspiciousRequests.length > 0 && (
+                                                    <div style={{
+                                                        marginTop: '12px',
+                                                        padding: '10px',
+                                                        background: 'rgba(255, 215, 0, 0.1)',
+                                                        borderRadius: '8px',
+                                                        border: '1px solid var(--warning-gold)'
+                                                    }}>
+                                                        <p style={{ fontSize: '11px', color: 'var(--warning-gold)', marginBottom: '8px', fontWeight: 600 }}>
+                                                            ⚠️ Suspicious Domains:
+                                                        </p>
+                                                        {reportData.dockerScan.suspiciousRequests.slice(0, 5).map((req: any, i: number) => (
+                                                            <div key={i} style={{ fontSize: '11px', marginBottom: '4px', wordBreak: 'break-all' }}>
+                                                                <code style={{ color: 'var(--warning-gold)' }}>{req.domain}</code>
+                                                                {req.reason && (
+                                                                    <span style={{ color: 'var(--text-muted)', marginLeft: '6px' }}>
+                                                                        ({req.reason})
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                        {reportData.dockerScan.suspiciousRequests.length > 5 && (
+                                                            <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                                                +{reportData.dockerScan.suspiciousRequests.length - 5} more...
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </>
                                         ) : (
-                                            <ReportRow label="Status" value="Unavailable" color="var(--warning-gold)" />
+                                            <ReportRow
+                                                label="Status"
+                                                value={reportData.dockerScan.error || "Unavailable"}
+                                                color="var(--warning-gold)"
+                                            />
                                         )}
                                     </div>
                                 </div>

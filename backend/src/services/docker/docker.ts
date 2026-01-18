@@ -120,7 +120,7 @@ export async function runDockerScan(url: string): Promise<DockerScanResult> {
       Image: PLAYWRIGHT_IMAGE,
       Cmd: ['bash', '-c', wrappedScript],
       HostConfig: {
-        AutoRemove: true,
+        AutoRemove: false,  // Don't auto-remove so we can get logs on failure
         NetworkMode: 'bridge',
       },
     });
@@ -130,21 +130,48 @@ export async function runDockerScan(url: string): Promise<DockerScanResult> {
     const containerId = container.id.substring(0, 12);
     console.log(`📋 [DOCKER] Container ID: ${containerId}`);
 
-    // Wait for container to finish
+    // Wait for container to finish with timeout
     console.log('⏳ [DOCKER] Waiting for container to finish...');
-    await container.wait();
 
-    // Get logs
-    const logs = await container.logs({
-      stdout: true,
-      stderr: true,
-      follow: false,
-    });
+    const timeoutMs = 60000; // 60 second timeout
+    const waitPromise = container.wait();
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Container timeout')), timeoutMs)
+    );
 
-    const output = parseDockerLogs(logs as Buffer);
+    let waitResult: { StatusCode: number };
+    try {
+      waitResult = await Promise.race([waitPromise, timeoutPromise]) as { StatusCode: number };
+    } catch (timeoutError) {
+      console.error('❌ [DOCKER] Container timed out, killing...');
+      try {
+        await container.kill();
+      } catch { }
+      await container.remove({ force: true }).catch(() => { });
+      throw new Error('Container execution timed out after 60s');
+    }
+
+    // Get logs (container is stopped but not removed yet)
+    let logs: Buffer;
+    try {
+      logs = await container.logs({
+        stdout: true,
+        stderr: true,
+        follow: false,
+      }) as Buffer;
+    } catch (logError) {
+      console.error('❌ [DOCKER] Failed to get logs:', logError);
+      await container.remove({ force: true }).catch(() => { });
+      throw new Error('Failed to retrieve container logs');
+    }
+
+    // Clean up container
+    await container.remove({ force: true }).catch(() => { });
+
+    const output = parseDockerLogs(logs);
 
     // Debug logging
-    console.log('[Docker] Raw output length:', (logs as Buffer).length);
+    console.log('[Docker] Raw output length:', logs.length);
     console.log('[Docker] Parsed output:', output.substring(0, 500));
 
     const result = extractResultJson(output);

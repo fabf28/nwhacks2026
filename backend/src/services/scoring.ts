@@ -113,27 +113,26 @@ export function calculateScore(result: ScanResult): number {
   // Docker sandbox scoring
   if (result.checks.dockerScan) {
     const docker = result.checks.dockerScan;
-    
-    if (!docker.success) {
-      score -= 5; // Minor penalty for failed scan
-    } else {
-      // Penalty based on suspicious requests found
-      const suspiciousCount = docker.suspiciousRequests.length;
-      if (suspiciousCount > 5) {
-        score -= 30; // Many suspicious requests - high risk
-      } else if (suspiciousCount > 2) {
-        score -= 20; // Some suspicious requests - medium risk
-      } else if (suspiciousCount > 0) {
-        score -= 10; // Few suspicious requests - low risk
-      }
 
-      // Penalty for excessive third-party domains
-      const thirdPartyCount = docker.thirdPartyDomains.length;
-      if (thirdPartyCount > 20) {
-        score -= 10; // Lots of third-party connections
-      } else if (thirdPartyCount > 10) {
-        score -= 5;
+    if (!docker.success) {
+      score -= 3; // Minor penalty for failed scan
+    } else {
+      const totalRequests = docker.totalRequests || 1;
+      const suspiciousCount = docker.suspiciousRequests.length;
+      const suspiciousPercent = (suspiciousCount / totalRequests) * 100;
+
+      // Only penalize if a significant percentage of requests are suspicious
+      // This prevents false positives on sites with many assets
+      if (suspiciousPercent > 20) {
+        score -= 25; // >20% suspicious - high risk
+      } else if (suspiciousPercent > 10) {
+        score -= 15; // 10-20% suspicious - medium risk
+      } else if (suspiciousPercent > 5) {
+        score -= 5; // 5-10% suspicious - low risk
       }
+      // Less than 5% suspicious = no penalty (likely false positives)
+
+      // No penalty for third-party domains - modern sites use CDNs, analytics, etc.
     }
   }
 
