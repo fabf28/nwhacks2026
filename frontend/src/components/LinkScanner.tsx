@@ -63,7 +63,12 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
           serverLocation: result.checks?.geolocation
             ? `${result.checks.geolocation.city}, ${result.checks.geolocation.country}`
             : 'Unknown',
+          isp: result.checks?.geolocation?.isp || 'Unknown',
           sandboxResult: 'clean',
+          // New network infrastructure data
+          reverseDns: result.checks?.reverseDns,
+          portScan: result.checks?.portScan,
+          ipReputation: result.checks?.ipReputation,
         });
         setIsScanning(false);
         onScanComplete?.();

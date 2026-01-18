@@ -24,11 +24,39 @@ export interface ScanResult {
       isSafe: boolean;
       threats: string[];
     };
+    reverseDns?: {
+      hostname: string;
+      ip: string;
+      matches: boolean;
+      hostnames: string[];
+    };
+    portScan?: {
+      ip: string;
+      openPorts: number[];
+      suspiciousPorts: number[];
+      isSuspicious: boolean;
+    };
+    ipReputation?: {
+      ip: string;
+      abuseConfidenceScore: number;
+      isWhitelisted: boolean;
+      countryCode: string;
+      isp: string;
+      domain: string;
+      totalReports: number;
+      lastReportedAt: string | null;
+      isSuspicious: boolean;
+    };
   };
 }
 
 export function calculateScore(result: ScanResult): number {
   let score = 100;
+
+  // Safe Browsing scoring (CRITICAL - fail immediately)
+  if (result.checks.safeBrowsing && !result.checks.safeBrowsing.isSafe) {
+    return 0; // Automatic fail if on blacklist
+  }
 
   // Domain age scoring
   if (result.checks.whois) {
@@ -53,9 +81,34 @@ export function calculateScore(result: ScanResult): number {
     score -= 20; // No SSL data available
   }
 
-  // Safe Browsing scoring (if implemented)
-  if (result.checks.safeBrowsing && !result.checks.safeBrowsing.isSafe) {
-    score = 0; // Automatic fail if on blacklist
+  // Reverse DNS scoring
+  if (result.checks.reverseDns && !result.checks.reverseDns.matches) {
+    score -= 5; // Minor penalty - CDNs often don't match
+  }
+
+  // Port scan scoring
+  if (result.checks.portScan && result.checks.portScan.isSuspicious) {
+    score -= 15; // Suspicious ports open
+  }
+
+  // IP Reputation scoring
+  if (result.checks.ipReputation) {
+    const rep = result.checks.ipReputation;
+    if (rep.abuseConfidenceScore > 75) {
+      score -= 40; // High abuse score - very suspicious
+    } else if (rep.abuseConfidenceScore > 50) {
+      score -= 25; // Medium abuse score
+    } else if (rep.abuseConfidenceScore > 25) {
+      score -= 10; // Low abuse score
+    }
+
+    if (rep.totalReports > 100) {
+      score -= 15; // Many reports
+    } else if (rep.totalReports > 50) {
+      score -= 10;
+    } else if (rep.totalReports > 10) {
+      score -= 5;
+    }
   }
 
   return Math.max(0, Math.min(100, score));

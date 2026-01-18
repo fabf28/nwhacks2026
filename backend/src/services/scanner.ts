@@ -2,6 +2,9 @@ import { checkWhois } from './whois';
 import { checkSsl } from './ssl';
 import { checkGeolocation } from './geolocation';
 import { checkSafeBrowsing } from './safeBrowsing';
+import { checkReverseDns } from './reverseDns';
+import { checkPorts } from './portScan';
+import { checkIpReputation } from './ipReputation';
 import { calculateScore, ScanResult } from './scoring';
 
 export interface ProgressUpdate {
@@ -59,7 +62,6 @@ export async function scanUrl(
         status: 'error',
         data: safeBrowsingData,
       });
-      // Immediately fail the scan if it's on a blacklist
       results.score = 0;
       onProgress({
         step: 'complete',
@@ -125,7 +127,7 @@ export async function scanUrl(
     });
   }
 
-  // Step 3: SSL Check
+  // Step 4: SSL Check
   onProgress({
     step: 'ssl',
     message: 'Verifying SSL certificate...',
@@ -159,7 +161,8 @@ export async function scanUrl(
     });
   }
 
-  // Step 4: Geolocation Check
+  // Step 5: Geolocation Check
+  let serverIp = '';
   onProgress({
     step: 'geolocation',
     message: 'Looking up server location...',
@@ -169,6 +172,7 @@ export async function scanUrl(
   try {
     const geoData = await checkGeolocation(hostname);
     results.checks.geolocation = geoData;
+    serverIp = geoData.ip;
 
     onProgress({
       step: 'geolocation',
@@ -184,7 +188,97 @@ export async function scanUrl(
     });
   }
 
-  // Step 5: Calculate final score
+  // Step 6: Reverse DNS Check
+  if (serverIp) {
+    onProgress({
+      step: 'reverseDns',
+      message: 'Verifying reverse DNS records...',
+      status: 'pending',
+    });
+
+    try {
+      const reverseDnsData = await checkReverseDns(hostname, serverIp);
+      results.checks.reverseDns = reverseDnsData;
+
+      onProgress({
+        step: 'reverseDns',
+        message: reverseDnsData.matches
+          ? 'Reverse DNS matches hostname'
+          : 'Reverse DNS does not match (common for CDNs)',
+        status: reverseDnsData.matches ? 'success' : 'warning',
+        data: reverseDnsData,
+      });
+    } catch (e) {
+      onProgress({
+        step: 'reverseDns',
+        message: 'Could not verify reverse DNS',
+        status: 'warning',
+      });
+    }
+
+    // Step 7: Port Scan
+    onProgress({
+      step: 'portScan',
+      message: 'Scanning for open ports...',
+      status: 'pending',
+    });
+
+    try {
+      const portData = await checkPorts(serverIp);
+      results.checks.portScan = portData;
+
+      onProgress({
+        step: 'portScan',
+        message: portData.isSuspicious
+          ? `Suspicious ports open: ${portData.suspiciousPorts.join(', ')}`
+          : `Standard ports only (${portData.openPorts.length} open)`,
+        status: portData.isSuspicious ? 'warning' : 'success',
+        data: portData,
+      });
+    } catch (e) {
+      onProgress({
+        step: 'portScan',
+        message: 'Could not complete port scan',
+        status: 'warning',
+      });
+    }
+
+    // Step 8: IP Reputation Check
+    onProgress({
+      step: 'ipReputation',
+      message: 'Checking IP reputation...',
+      status: 'pending',
+    });
+
+    try {
+      const ipRepData = await checkIpReputation(serverIp);
+      results.checks.ipReputation = ipRepData;
+
+      if (ipRepData.isSuspicious) {
+        onProgress({
+          step: 'ipReputation',
+          message: `IP flagged! Abuse score: ${ipRepData.abuseConfidenceScore}%, Reports: ${ipRepData.totalReports}`,
+          status: 'error',
+          data: ipRepData,
+        });
+      } else {
+        onProgress({
+          step: 'ipReputation',
+          message: `IP reputation clean (Abuse score: ${ipRepData.abuseConfidenceScore}%)`,
+          status: 'success',
+          data: ipRepData,
+        });
+      }
+    } catch (e) {
+      onProgress({
+        step: 'ipReputation',
+        message: 'Could not check IP reputation',
+        status: 'warning',
+      });
+    }
+  }
+
+  // Final Step: Calculate final score
   const finalScore = calculateScore(results);
   results.score = finalScore;
 

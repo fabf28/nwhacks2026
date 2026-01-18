@@ -20,9 +20,9 @@ This document tracks the security vectors and metrics used for end-to-end websit
 ## 3. Network & Infrastructure
 - [x] **Server Geolocation** (Real via IP-API)
 - [x] **ISP/Hosting Provider** (Real via IP-API)
-- [ ] **IP Reputation** - Blacklist checks for server IP.
-- [ ] **Reverse DNS** - Hostname/IP consistency check.
-- [ ] **Port Scanning** - Identifying suspicious open ports (e.g., 22, 3389).
+- [x] **IP Reputation** - Blacklist checks via AbuseIPDB (requires API key)
+- [x] **Reverse DNS** - Hostname/IP consistency check (real)
+- [x] **Port Scanning** - Identifying suspicious open ports (real)
 
 ## 4. Reputation & Intelligence
 - [x] **Google Safe Browsing** (Implemented, requires API key)
