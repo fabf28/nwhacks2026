@@ -98,6 +98,8 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
           sensitiveFiles: result.checks?.sensitiveFiles,
           versionDisclosure: result.checks?.versionDisclosure,
           adminPanels: result.checks?.adminPanels,
+          // Docker sandbox data
+          dockerScan: result.checks?.dockerScan,
         });
         setIsScanning(false);
         onScanComplete?.();

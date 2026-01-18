@@ -289,11 +289,6 @@ export async function scanUrl(
   onProgress({
     step: 'dockerScan',
     message: 'Running sandboxed browser analysis...',
-    
-  // Step 10: Security Headers Check
-  onProgress({
-    step: 'securityHeaders',
-    message: 'Checking HTTP security headers...',
     status: 'pending',
   });
 
@@ -321,6 +316,24 @@ export async function scanUrl(
         message: `Analyzed ${dockerData.totalRequests} network requests. No threats detected.`,
         status: 'success',
         data: dockerData,
+      });
+    }
+  } catch (e) {
+    onProgress({
+      step: 'dockerScan',
+      message: 'Could not run sandbox analysis (is Docker running?)',
+      status: 'warning',
+    });
+  }
+
+  // Step 10: Security Headers Check
+  onProgress({
+    step: 'securityHeaders',
+    message: 'Checking HTTP security headers...',
+    status: 'pending',
+  });
+
+  try {
     const headersData = await checkSecurityHeaders(url);
     results.checks.securityHeaders = headersData;
 
@@ -354,7 +367,7 @@ export async function scanUrl(
     });
   }
 
-  // Step 10: Cookie Security Check
+  // Step 11: Cookie Security Check
   onProgress({
     step: 'cookieSecurity',
     message: 'Analyzing cookie security...',
@@ -389,8 +402,6 @@ export async function scanUrl(
     }
   } catch (e) {
     onProgress({
-      step: 'dockerScan',
-      message: 'Could not run sandbox analysis (is Docker running?)',
       step: 'cookieSecurity',
       message: 'Could not analyze cookies',
       status: 'warning',

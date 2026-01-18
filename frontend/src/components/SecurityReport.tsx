@@ -81,6 +81,31 @@ interface ReportData {
         foundPanels: { path: string; type: string }[];
         hasExposedPanels: boolean;
     };
+    // Docker sandbox data
+    dockerScan?: {
+        success: boolean;
+        pageTitle?: string;
+        finalUrl?: string;
+        networkRequests: Array<{
+            url: string;
+            domain: string;
+            resourceType: string;
+            status?: number;
+            isSuspicious: boolean;
+            reason?: string;
+        }>;
+        suspiciousRequests: Array<{
+            url: string;
+            domain: string;
+            resourceType: string;
+            status?: number;
+            isSuspicious: boolean;
+            reason?: string;
+        }>;
+        totalRequests: number;
+        thirdPartyDomains: string[];
+        error?: string;
+    };
 }
 
 const SecurityReport: React.FC<{ data: ReportData }> = ({ data }) => {
@@ -281,12 +306,47 @@ const SecurityReport: React.FC<{ data: ReportData }> = ({ data }) => {
                 {/* 10. Virtual Sandbox */}
                 <div className="glass-card" style={cardStyle}>
                     <div style={headerStyle}><ShieldCheck size={20} color="var(--primary)" /><h3 style={{ fontSize: '1rem' }}>Virtual Sandbox</h3></div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Safety Check</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {getStatusIcon(data.sandboxResult)}
-                            <span style={{ fontWeight: 600 }}>{data.sandboxResult?.toUpperCase() || 'PENDING'}</span>
-                        </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {data.dockerScan ? (
+                            data.dockerScan.success ? (
+                                <>
+                                    <div style={rowStyle}>
+                                        <span style={{ color: 'var(--text-muted)' }}>Network Requests</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {getStatusIcon(data.dockerScan.suspiciousRequests.length > 0 ? 'danger' : 'success')}
+                                            <span style={{ color: data.dockerScan.suspiciousRequests.length > 0 ? 'var(--danger)' : 'var(--success)' }}>
+                                                {data.dockerScan.suspiciousRequests.length > 0 
+                                                    ? `${data.dockerScan.suspiciousRequests.length} suspicious` 
+                                                    : `${data.dockerScan.totalRequests} clean`}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div style={rowStyle}>
+                                        <span style={{ color: 'var(--text-muted)' }}>Third-Party Domains</span>
+                                        <span>{data.dockerScan.thirdPartyDomains.length}</span>
+                                    </div>
+                                    {data.dockerScan.pageTitle && (
+                                        <div style={rowStyle}>
+                                            <span style={{ color: 'var(--text-muted)' }}>Page Title</span>
+                                            <span style={{ fontSize: '0.85rem', maxWidth: '60%', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{data.dockerScan.pageTitle}</span>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div style={rowStyle}>
+                                    <span style={{ color: 'var(--text-muted)' }}>Status</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        {getStatusIcon('warning')}
+                                        <span style={{ color: 'var(--warning)' }}>Unavailable</span>
+                                    </div>
+                                </div>
+                            )
+                        ) : (
+                            <div style={rowStyle}>
+                                <span style={{ color: 'var(--text-muted)' }}>Status</span>
+                                <span style={{ color: 'var(--text-muted)' }}>N/A</span>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
