@@ -101,9 +101,22 @@ interface ReportData {
             status?: number;
             isSuspicious: boolean;
             reason?: string;
+            riskLevel?: 'low' | 'medium' | 'high' | 'critical';
+            categories?: string[];
+            reasons?: string[];
+            riskScore?: number;
         }>;
         totalRequests: number;
         thirdPartyDomains: string[];
+        analysisSummary?: {
+            totalRequests: number;
+            suspiciousCount: number;
+            criticalCount: number;
+            highCount: number;
+            categories: Record<string, number>;
+            overallRisk: 'safe' | 'low' | 'medium' | 'high' | 'critical';
+            totalRiskScore: number;
+        };
         error?: string;
     };
 }
@@ -310,6 +323,28 @@ const SecurityReport: React.FC<{ data: ReportData }> = ({ data }) => {
                         {data.dockerScan ? (
                             data.dockerScan.success ? (
                                 <>
+                                    {/* Overall Risk Level */}
+                                    {data.dockerScan.analysisSummary && (
+                                        <div style={rowStyle}>
+                                            <span style={{ color: 'var(--text-muted)' }}>Overall Risk</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                {getStatusIcon(
+                                                    data.dockerScan.analysisSummary.overallRisk === 'safe' ? 'success' :
+                                                    data.dockerScan.analysisSummary.overallRisk === 'low' ? 'success' :
+                                                    data.dockerScan.analysisSummary.overallRisk === 'medium' ? 'warning' : 'danger'
+                                                )}
+                                                <span style={{ 
+                                                    color: data.dockerScan.analysisSummary.overallRisk === 'safe' ? 'var(--success)' :
+                                                           data.dockerScan.analysisSummary.overallRisk === 'low' ? 'var(--success)' :
+                                                           data.dockerScan.analysisSummary.overallRisk === 'medium' ? 'var(--warning)' : 'var(--danger)',
+                                                    textTransform: 'capitalize',
+                                                    fontWeight: 600
+                                                }}>
+                                                    {data.dockerScan.analysisSummary.overallRisk}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
                                     <div style={rowStyle}>
                                         <span style={{ color: 'var(--text-muted)' }}>Network Requests</span>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -321,6 +356,44 @@ const SecurityReport: React.FC<{ data: ReportData }> = ({ data }) => {
                                             </span>
                                         </div>
                                     </div>
+                                    {/* Critical/High count breakdown */}
+                                    {data.dockerScan.analysisSummary && (data.dockerScan.analysisSummary.criticalCount > 0 || data.dockerScan.analysisSummary.highCount > 0) && (
+                                        <div style={rowStyle}>
+                                            <span style={{ color: 'var(--text-muted)' }}>Severity</span>
+                                            <div style={{ display: 'flex', gap: '12px', fontSize: '0.85rem' }}>
+                                                {data.dockerScan.analysisSummary.criticalCount > 0 && (
+                                                    <span style={{ color: 'var(--danger)', fontWeight: 600 }}>
+                                                        {data.dockerScan.analysisSummary.criticalCount} critical
+                                                    </span>
+                                                )}
+                                                {data.dockerScan.analysisSummary.highCount > 0 && (
+                                                    <span style={{ color: '#f97316', fontWeight: 600 }}>
+                                                        {data.dockerScan.analysisSummary.highCount} high
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {/* Categories detected */}
+                                    {data.dockerScan.analysisSummary && Object.keys(data.dockerScan.analysisSummary.categories).length > 0 && (
+                                        <div style={{ marginTop: '4px' }}>
+                                            <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', display: 'block', marginBottom: '6px' }}>Categories Detected</span>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                                {Object.entries(data.dockerScan.analysisSummary.categories).slice(0, 5).map(([category, count]) => (
+                                                    <span key={category} style={{
+                                                        background: 'rgba(139, 92, 246, 0.15)',
+                                                        color: 'var(--primary)',
+                                                        padding: '2px 8px',
+                                                        borderRadius: '12px',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: 500
+                                                    }}>
+                                                        {category} ({count})
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                     <div style={rowStyle}>
                                         <span style={{ color: 'var(--text-muted)' }}>Third-Party Domains</span>
                                         <span>{data.dockerScan.thirdPartyDomains.length}</span>
