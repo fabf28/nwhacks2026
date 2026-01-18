@@ -48,7 +48,6 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
                     const finalize = () => {
                         scannerRef.current = null;
                         setScannerStarted(false);
-                        alert(`Scanned URL: ${decodedText}`);
                         onScanSuccess(decodedText);
                     };
 

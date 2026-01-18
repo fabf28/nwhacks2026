@@ -13,25 +13,50 @@ export interface ScanResult {
       expiresOn: string;
       daysUntilExpiry: number;
     };
+    geolocation?: {
+      ip: string;
+      city: string;
+      country: string;
+      isp: string;
+      org: string;
+    };
     safeBrowsing?: {
       isSafe: boolean;
       threats: string[];
     };
-    browserScan?: {
-      success: boolean;
-      containerId?: string;
-      pageTitle?: string;
-      finalUrl?: string;
-      totalRequests: number;
-      suspiciousRequests: { url: string; reason?: string }[];
-      thirdPartyDomains: string[];
-      error?: string;
+    reverseDns?: {
+      hostname: string;
+      ip: string;
+      matches: boolean;
+      hostnames: string[];
+    };
+    portScan?: {
+      ip: string;
+      openPorts: number[];
+      suspiciousPorts: number[];
+      isSuspicious: boolean;
+    };
+    ipReputation?: {
+      ip: string;
+      abuseConfidenceScore: number;
+      isWhitelisted: boolean;
+      countryCode: string;
+      isp: string;
+      domain: string;
+      totalReports: number;
+      lastReportedAt: string | null;
+      isSuspicious: boolean;
     };
   };
 }
 
 export function calculateScore(result: ScanResult): number {
   let score = 100;
+
+  // Safe Browsing scoring (CRITICAL - fail immediately)
+  if (result.checks.safeBrowsing && !result.checks.safeBrowsing.isSafe) {
+    return 0; // Automatic fail if on blacklist
+  }
 
   // Domain age scoring
   if (result.checks.whois) {
@@ -56,31 +81,33 @@ export function calculateScore(result: ScanResult): number {
     score -= 20; // No SSL data available
   }
 
-  // Safe Browsing scoring (if implemented)
-  if (result.checks.safeBrowsing && !result.checks.safeBrowsing.isSafe) {
-    score = 0; // Automatic fail if on blacklist
+  // Reverse DNS scoring
+  if (result.checks.reverseDns && !result.checks.reverseDns.matches) {
+    score -= 5; // Minor penalty - CDNs often don't match
   }
 
-  // Browser network scan scoring
-  if (result.checks.browserScan && result.checks.browserScan.success) {
-    const suspicious = result.checks.browserScan.suspiciousRequests.length;
-    if (suspicious > 0) {
-      // Deduct points for suspicious network requests
-      score -= Math.min(40, suspicious * 10);
+  // Port scan scoring
+  if (result.checks.portScan && result.checks.portScan.isSuspicious) {
+    score -= 15; // Suspicious ports open
+  }
+
+  // IP Reputation scoring
+  if (result.checks.ipReputation) {
+    const rep = result.checks.ipReputation;
+    if (rep.abuseConfidenceScore > 75) {
+      score -= 40; // High abuse score - very suspicious
+    } else if (rep.abuseConfidenceScore > 50) {
+      score -= 25; // Medium abuse score
+    } else if (rep.abuseConfidenceScore > 25) {
+      score -= 10; // Low abuse score
     }
-    // Penalize if final URL is on a different domain (redirect to phishing)
-    if (result.checks.browserScan.finalUrl) {
-      try {
-        const originalHost = new URL(result.url).hostname;
-        const finalHost = new URL(result.checks.browserScan.finalUrl).hostname;
-        if (originalHost !== finalHost) {
-          score -= 20;
-        }
-      } catch {}
-    }
-    // Penalize excessive third-party domains (potential tracking/malware)
-    if (result.checks.browserScan.thirdPartyDomains.length > 20) {
+
+    if (rep.totalReports > 100) {
+      score -= 15; // Many reports
+    } else if (rep.totalReports > 50) {
       score -= 10;
+    } else if (rep.totalReports > 10) {
+      score -= 5;
     }
   }
 

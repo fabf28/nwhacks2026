@@ -1,7 +1,11 @@
 import { checkWhois } from './whois';
 import { checkSsl } from './ssl';
+import { checkGeolocation } from './geolocation';
+import { checkSafeBrowsing } from './safeBrowsing';
+import { checkReverseDns } from './reverseDns';
+import { checkPorts } from './portScan';
+import { checkIpReputation } from './ipReputation';
 import { calculateScore, ScanResult } from './scoring';
-import { runDockerScan } from './docker/docker';
 
 export interface ProgressUpdate {
   step: string;
@@ -40,7 +44,49 @@ export async function scanUrl(
     return results;
   }
 
-  // Step 2: WHOIS Check
+  // Step 2: Google Safe Browsing Check (CRITICAL - check first)
+  onProgress({
+    step: 'safeBrowsing',
+    message: 'Checking against threat databases...',
+    status: 'pending',
+  });
+
+  try {
+    const safeBrowsingData = await checkSafeBrowsing(url);
+    results.checks.safeBrowsing = safeBrowsingData;
+
+    if (!safeBrowsingData.isSafe) {
+      onProgress({
+        step: 'safeBrowsing',
+        message: `THREAT DETECTED: ${safeBrowsingData.threats.join(', ')}`,
+        status: 'error',
+        data: safeBrowsingData,
+      });
+      results.score = 0;
+      onProgress({
+        step: 'complete',
+        message: 'Scan complete. URL is UNSAFE!',
+        status: 'error',
+        data: results,
+      });
+      return results;
+    } else {
+      onProgress({
+        step: 'safeBrowsing',
+        message: 'No threats detected in Google Safe Browsing',
+        status: 'success',
+        data: safeBrowsingData,
+      });
+    }
+  } catch (e) {
+    onProgress({
+      step: 'safeBrowsing',
+      message: 'Could not verify against threat databases',
+      status: 'warning',
+    });
+  }
+
+  // Step 3: WHOIS Check
   onProgress({
     step: 'whois',
     message: 'Checking domain registration...',
@@ -81,7 +127,7 @@ export async function scanUrl(
     });
   }
 
-  // Step 3: SSL Check
+  // Step 4: SSL Check
   onProgress({
     step: 'ssl',
     message: 'Verifying SSL certificate...',
@@ -115,60 +161,124 @@ export async function scanUrl(
     });
   }
 
-  // Step 4: Docker Browser Scan
+  // Step 5: Geolocation Check
+  let serverIp = '';
   onProgress({
-    step: 'browser',
-    message: 'Analyzing page in sandboxed browser...',
+    step: 'geolocation',
+    message: 'Looking up server location...',
     status: 'pending',
   });
 
   try {
-    const browserData = await runDockerScan(url);
-    results.checks.browserScan = {
-      success: browserData.success,
-      containerId: browserData.containerId,
-      pageTitle: browserData.pageTitle,
-      finalUrl: browserData.finalUrl,
-      totalRequests: browserData.totalRequests,
-      suspiciousRequests: browserData.suspiciousRequests.map((r) => ({
-        url: r.url,
-        reason: r.reason,
-      })),
-      thirdPartyDomains: browserData.thirdPartyDomains,
-      error: browserData.error,
-    };
+    const geoData = await checkGeolocation(hostname);
+    results.checks.geolocation = geoData;
+    serverIp = geoData.ip;
 
-    if (browserData.error) {
-      onProgress({
-        step: 'browser',
-        message: `Browser scan failed: ${browserData.error}`,
-        status: 'warning',
-        data: browserData,
-      });
-    } else if (browserData.suspiciousRequests.length > 0) {
-      onProgress({
-        step: 'browser',
-        message: `⚠️ Found ${browserData.suspiciousRequests.length} suspicious network requests out of ${browserData.totalRequests} total`,
-        status: 'warning',
-        data: browserData,
-      });
-    } else {
-      onProgress({
-        step: 'browser',
-        message: `Page loaded: "${browserData.pageTitle || 'No title'}" - ${browserData.totalRequests} network requests analyzed`,
-        status: 'success',
-        data: browserData,
-      });
-    }
+    onProgress({
+      step: 'geolocation',
+      message: `Server located in ${geoData.city}, ${geoData.country}`,
+      status: 'success',
+      data: geoData,
+    });
   } catch (e) {
     onProgress({
-      step: 'browser',
-      message: 'Docker scan unavailable',
+      step: 'geolocation',
+      message: 'Could not determine server location',
       status: 'warning',
     });
   }
 
-  // Step 5: Calculate final score
+  // Step 6: Reverse DNS Check
+  if (serverIp) {
+    onProgress({
+      step: 'reverseDns',
+      message: 'Verifying reverse DNS records...',
+      status: 'pending',
+    });
+
+    try {
+      const reverseDnsData = await checkReverseDns(hostname, serverIp);
+      results.checks.reverseDns = reverseDnsData;
+
+      onProgress({
+        step: 'reverseDns',
+        message: reverseDnsData.matches
+          ? 'Reverse DNS matches hostname'
+          : 'Reverse DNS does not match (common for CDNs)',
+        status: reverseDnsData.matches ? 'success' : 'warning',
+        data: reverseDnsData,
+      });
+    } catch (e) {
+      onProgress({
+        step: 'reverseDns',
+        message: 'Could not verify reverse DNS',
+        status: 'warning',
+      });
+    }
+
+    // Step 7: Port Scan
+    onProgress({
+      step: 'portScan',
+      message: 'Scanning for open ports...',
+      status: 'pending',
+    });
+
+    try {
+      const portData = await checkPorts(serverIp);
+      results.checks.portScan = portData;
+
+      onProgress({
+        step: 'portScan',
+        message: portData.isSuspicious
+          ? `Suspicious ports open: ${portData.suspiciousPorts.join(', ')}`
+          : `Standard ports only (${portData.openPorts.length} open)`,
+        status: portData.isSuspicious ? 'warning' : 'success',
+        data: portData,
+      });
+    } catch (e) {
+      onProgress({
+        step: 'portScan',
+        message: 'Could not complete port scan',
+        status: 'warning',
+      });
+    }
+
+    // Step 8: IP Reputation Check
+    onProgress({
+      step: 'ipReputation',
+      message: 'Checking IP reputation...',
+      status: 'pending',
+    });
+
+    try {
+      const ipRepData = await checkIpReputation(serverIp);
+      results.checks.ipReputation = ipRepData;
+
+      if (ipRepData.isSuspicious) {
+        onProgress({
+          step: 'ipReputation',
+          message: `IP flagged! Abuse score: ${ipRepData.abuseConfidenceScore}%, Reports: ${ipRepData.totalReports}`,
+          status: 'error',
+          data: ipRepData,
+        });
+      } else {
+        onProgress({
+          step: 'ipReputation',
+          message: `IP reputation clean (Abuse score: ${ipRepData.abuseConfidenceScore}%)`,
+          status: 'success',
+          data: ipRepData,
+        });
+      }
+    } catch (e) {
+      onProgress({
+        step: 'ipReputation',
+        message: 'Could not check IP reputation',
+        status: 'warning',
+      });
+    }
+  }
+
+  // Final Step: Calculate final score
   const finalScore = calculateScore(results);
   results.score = finalScore;
 
