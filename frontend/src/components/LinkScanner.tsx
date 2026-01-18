@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Loader2, ShieldCheck, CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
+import { Search, Loader2, ShieldCheck, CheckCircle, AlertTriangle, XCircle, QrCode } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import SecurityReport from './SecurityReport';
 
@@ -11,12 +11,20 @@ interface ProgressUpdate {
     data?: any;
 }
 
-const LinkScanner: React.FC = () => {
+interface LinkScannerProps {
+    initialUrl?: string | null;
+    onScanComplete?: () => void;
+}
+
+const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete }) => {
     const [url, setUrl] = useState('');
     const [isScanning, setIsScanning] = useState(false);
+    const [isConnected, setIsConnected] = useState(false);
     const [progressUpdates, setProgressUpdates] = useState<ProgressUpdate[]>([]);
     const [reportData, setReportData] = useState<any>(null);
+    const [isFromQR, setIsFromQR] = useState(false);
     const socketRef = useRef<Socket | null>(null);
+    const hasAutoScanned = useRef(false);
 
     useEffect(() => {
         // Connect to backend
@@ -25,6 +33,11 @@ const LinkScanner: React.FC = () => {
 
         socket.on('connect', () => {
             console.log('Connected to backend');
+            setIsConnected(true);
+        });
+
+        socket.on('disconnect', () => {
+            setIsConnected(false);
         });
 
         socket.on('scan-progress', (update: ProgressUpdate) => {
@@ -43,6 +56,7 @@ const LinkScanner: React.FC = () => {
                     sandboxResult: 'clean',
                 });
                 setIsScanning(false);
+                onScanComplete?.();
             }
         });
 
@@ -54,16 +68,30 @@ const LinkScanner: React.FC = () => {
         return () => {
             socket.disconnect();
         };
-    }, []);
+    }, [onScanComplete]);
+
+    // Auto-scan when initialUrl is provided AND socket is connected
+    useEffect(() => {
+        if (initialUrl && isConnected && !hasAutoScanned.current && socketRef.current) {
+            hasAutoScanned.current = true;
+            setUrl(initialUrl);
+            setIsFromQR(true);
+            setIsScanning(true);
+            setReportData(null);
+            setProgressUpdates([]);
+            socketRef.current.emit('start-scan', { url: initialUrl });
+        }
+    }, [initialUrl, isConnected]);
 
     const handleScan = () => {
         if (!url || !socketRef.current) return;
 
+        hasAutoScanned.current = false;
+        setIsFromQR(false);
         setIsScanning(true);
         setReportData(null);
         setProgressUpdates([]);
 
-        // Emit scan request to backend
         socketRef.current.emit('start-scan', { url });
     };
 
@@ -82,6 +110,26 @@ const LinkScanner: React.FC = () => {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+            {/* QR Source Banner */}
+            {isFromQR && isScanning && (
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="glass-card"
+                    style={{
+                        padding: '16px 24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        background: 'rgba(0, 242, 254, 0.1)',
+                        borderColor: 'var(--primary)'
+                    }}
+                >
+                    <QrCode size={20} color="var(--primary)" />
+                    <span>Scanning URL from QR Code...</span>
+                </motion.div>
+            )}
+
             <div className="glass-card" style={{ padding: '40px', textAlign: 'center' }}>
                 <h2 style={{ marginBottom: '24px' }}>Deep Scan URL</h2>
                 <div style={{ position: 'relative', marginBottom: '24px' }}>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, Link, Camera, History, Settings, ExternalLink } from 'lucide-react';
+import { Shield, Link, Camera, History, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LinkScanner from './components/LinkScanner';
 import QRScanner from './components/QRScanner';
@@ -8,6 +8,17 @@ type ViewMode = 'link' | 'qr' | 'history' | 'settings';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewMode>('link');
+  const [scannedUrl, setScannedUrl] = useState<string | null>(null);
+
+  const handleQRScan = (url: string) => {
+    // Store the scanned URL and switch to link scanner
+    setScannedUrl(url);
+    setActiveView('link');
+  };
+
+  const clearScannedUrl = () => {
+    setScannedUrl(null);
+  };
 
   const navItems = [
     { id: 'link', icon: Link, label: 'Link Scanner' },
@@ -19,12 +30,12 @@ const App: React.FC = () => {
   return (
     <div className="app-container">
       {/* Sidebar / Navigation */}
-      <nav className="glass-card" style={{ 
-        position: 'fixed', 
-        left: '20px', 
-        top: '20px', 
-        bottom: '20px', 
-        width: '80px', 
+      <nav className="glass-card" style={{
+        position: 'fixed',
+        left: '20px',
+        top: '20px',
+        bottom: '20px',
+        width: '80px',
         zIndex: 100,
         display: 'flex',
         flexDirection: 'column',
@@ -35,7 +46,7 @@ const App: React.FC = () => {
         <div style={{ color: 'var(--primary)', marginBottom: '20px' }}>
           <Shield size={32} />
         </div>
-        
+
         {navItems.map((item) => (
           <button
             key={item.id}
@@ -52,8 +63,8 @@ const App: React.FC = () => {
               gap: '4px'
             }}
           >
-            <item.icon size={24} style={{ 
-              filter: activeView === item.id ? 'drop-shadow(0 0 8px var(--primary-glow))' : 'none' 
+            <item.icon size={24} style={{
+              filter: activeView === item.id ? 'drop-shadow(0 0 8px var(--primary-glow))' : 'none'
             }} />
             <span style={{ fontSize: '10px', fontWeight: 600 }}>{item.label.split(' ')[0]}</span>
           </button>
@@ -61,16 +72,16 @@ const App: React.FC = () => {
       </nav>
 
       {/* Main Content Area */}
-      <main style={{ 
-        marginLeft: '120px', 
-        padding: '40px', 
-        minHeight: '100vh', 
-        display: 'flex', 
-        justifyContent: 'center' 
+      <main style={{
+        marginLeft: '120px',
+        padding: '40px',
+        minHeight: '100vh',
+        display: 'flex',
+        justifyContent: 'center'
       }}>
         <div style={{ width: '100%', maxWidth: '900px' }}>
           <header style={{ marginBottom: '40px' }}>
-            <motion.h1 
+            <motion.h1
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
               style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '8px' }}
@@ -89,7 +100,10 @@ const App: React.FC = () => {
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <LinkScanner />
+                <LinkScanner
+                  initialUrl={scannedUrl}
+                  onScanComplete={clearScannedUrl}
+                />
               </motion.div>
             )}
 
@@ -101,7 +115,7 @@ const App: React.FC = () => {
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <QRScanner onScanSuccess={() => setActiveView('link')} />
+                <QRScanner onScanSuccess={handleQRScan} />
               </motion.div>
             )}
 
