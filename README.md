@@ -1,3 +1,5 @@
+dont push this to main lol it's too strict on legit websites i guess
+
 # NwHacks 2026
 
 A comprehensive URL security scanner that analyzes QR codes and links for potential threats before users visit them. Built for nwHacks 2026.
