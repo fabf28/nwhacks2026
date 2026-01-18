@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, CheckCircle, Globe, Lock, Server, Network, Wifi, Shield, ShieldCheck, FileCheck, Cookie, Info, Download, MessageCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle, Globe, Lock, Server, Network, Wifi, Shield, ShieldCheck, FileCheck, Cookie, Info, Download, MessageCircle, AlertTriangle } from 'lucide-react';
 import { generatePDFReport } from '../utils/pdfGenerator';
 import ChatPanel from './ChatPanel';
 import { io, Socket } from 'socket.io-client';
@@ -90,6 +90,8 @@ const WebsiteScanner: React.FC<WebsiteScannerProps> = ({ initialUrl }) => {
     const [reportData, setReportData] = useState<any>(null);
     const [activeStepIndex, setActiveStepIndex] = useState(-1);
     const [completedSteps, setCompletedSteps] = useState<number[]>([]);
+    const [deepScan, setDeepScan] = useState(false);
+    const [hasConsent, setHasConsent] = useState(false);
     const socketRef = useRef<Socket | null>(null);
     const hasAutoScanned = useRef(false);
 
@@ -198,7 +200,10 @@ const WebsiteScanner: React.FC<WebsiteScannerProps> = ({ initialUrl }) => {
         // Simulate "detecting" phase for 2 seconds
         setTimeout(() => {
             setStage('scanning');
-            socketRef.current?.emit('start-scan', { url: normalizedUrl });
+            socketRef.current?.emit('start-scan', {
+                url: normalizedUrl,
+                deepScan: deepScan && hasConsent
+            });
         }, 2000);
     };
 
@@ -326,6 +331,106 @@ const WebsiteScanner: React.FC<WebsiteScannerProps> = ({ initialUrl }) => {
                             >
                                 <ArrowRight size={24} color="var(--text-lavender)" />
                             </button>
+                        </div>
+
+                        {/* Deep Scan Toggle */}
+                        <div style={{
+                            marginTop: '16px',
+                            padding: '16px',
+                            background: 'rgba(255, 255, 255, 0.03)',
+                            borderRadius: '12px',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            textAlign: 'left'
+                        }}>
+                            <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                marginBottom: deepScan ? '12px' : '0'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Shield size={18} color="var(--warning-gold)" />
+                                    <span style={{ fontSize: '14px', fontWeight: 500 }}>Deep Vulnerability Scan</span>
+                                </div>
+                                <label style={{
+                                    position: 'relative',
+                                    width: '44px',
+                                    height: '24px',
+                                    cursor: 'pointer'
+                                }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={deepScan}
+                                        onChange={(e) => {
+                                            setDeepScan(e.target.checked);
+                                            if (!e.target.checked) setHasConsent(false);
+                                        }}
+                                        style={{ opacity: 0, width: 0, height: 0 }}
+                                    />
+                                    <span style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        background: deepScan ? 'var(--warning-gold)' : 'rgba(255,255,255,0.2)',
+                                        borderRadius: '24px',
+                                        transition: 'all 0.3s',
+                                    }}>
+                                        <span style={{
+                                            position: 'absolute',
+                                            left: deepScan ? '22px' : '2px',
+                                            top: '2px',
+                                            width: '20px',
+                                            height: '20px',
+                                            background: 'white',
+                                            borderRadius: '50%',
+                                            transition: 'all 0.3s',
+                                        }} />
+                                    </span>
+                                </label>
+                            </div>
+
+                            {deepScan && (
+                                <div style={{
+                                    padding: '12px',
+                                    background: 'rgba(255, 77, 109, 0.1)',
+                                    border: '1px solid var(--danger-red)',
+                                    borderRadius: '8px',
+                                }}>
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'flex-start',
+                                        gap: '10px',
+                                        marginBottom: '12px'
+                                    }}>
+                                        <AlertTriangle size={18} color="var(--danger-red)" style={{ flexShrink: 0, marginTop: '2px' }} />
+                                        <p style={{
+                                            fontSize: '12px',
+                                            color: 'var(--danger-red)',
+                                            lineHeight: 1.5,
+                                            margin: 0
+                                        }}>
+                                            <strong>⚠️ Legal Warning:</strong> Deep scanning probes for exposed files and admin panels.
+                                            This is <strong>illegal</strong> without explicit permission from the website owner.
+                                        </p>
+                                    </div>
+                                    <label style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        cursor: 'pointer',
+                                        fontSize: '12px'
+                                    }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={hasConsent}
+                                            onChange={(e) => setHasConsent(e.target.checked)}
+                                            style={{ width: '16px', height: '16px', accentColor: 'var(--warning-gold)' }}
+                                        />
+                                        <span style={{ color: 'var(--text-main)' }}>
+                                            I own this website or have explicit written permission to scan it.
+                                        </span>
+                                    </label>
+                                </div>
+                            )}
                         </div>
 
                     </motion.div>
