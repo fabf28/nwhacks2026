@@ -19,6 +19,71 @@ export interface ScanResult {
       ageInDays: number;
       registrar: string;
     };
+    ssl?: {
+      valid: boolean;
+      issuer: string;
+      expiresOn: string;
+      daysUntilExpiry: number;
+    };
+    geolocation?: {
+      ip: string;
+      city: string;
+      country: string;
+      isp: string;
+      org: string;
+    };
+    safeBrowsing?: {
+      isSafe: boolean;
+      threats: string[];
+    };
+    reverseDns?: {
+      hostname: string;
+      ip: string;
+      matches: boolean;
+      hostnames: string[];
+    };
+    portScan?: {
+      ip: string;
+      openPorts: number[];
+      suspiciousPorts: number[];
+      isSuspicious: boolean;
+    };
+    ipReputation?: {
+      ip: string;
+      abuseConfidenceScore: number;
+      isWhitelisted: boolean;
+      countryCode: string;
+      isp: string;
+      domain: string;
+      totalReports: number;
+      lastReportedAt: string | null;
+      isSuspicious: boolean;
+    };
+    dockerScan?: {
+      success: boolean;
+      containerId?: string;
+      pageTitle?: string;
+      finalUrl?: string;
+      networkRequests: Array<{
+        url: string;
+        domain: string;
+        resourceType: string;
+        status?: number;
+        isSuspicious: boolean;
+        reason?: string;
+      }>;
+      suspiciousRequests: Array<{
+        url: string;
+        domain: string;
+        resourceType: string;
+        status?: number;
+        isSuspicious: boolean;
+        reason?: string;
+      }>;
+      totalRequests: number;
+      thirdPartyDomains: string[];
+      error?: string;
+    };
     ssl?: SslResult;
     geolocation?: GeolocationResult;
     safeBrowsing?: SafeBrowsingResult;
@@ -105,6 +170,33 @@ export function calculateScore(result: ScanResult): number {
       score -= 10;
     } else if (rep.totalReports > 10) {
       score -= 5;
+    }
+  }
+
+  // Docker sandbox scoring
+  if (result.checks.dockerScan) {
+    const docker = result.checks.dockerScan;
+    
+    if (!docker.success) {
+      score -= 5; // Minor penalty for failed scan
+    } else {
+      // Penalty based on suspicious requests found
+      const suspiciousCount = docker.suspiciousRequests.length;
+      if (suspiciousCount > 5) {
+        score -= 30; // Many suspicious requests - high risk
+      } else if (suspiciousCount > 2) {
+        score -= 20; // Some suspicious requests - medium risk
+      } else if (suspiciousCount > 0) {
+        score -= 10; // Few suspicious requests - low risk
+      }
+
+      // Penalty for excessive third-party domains
+      const thirdPartyCount = docker.thirdPartyDomains.length;
+      if (thirdPartyCount > 20) {
+        score -= 10; // Lots of third-party connections
+      } else if (thirdPartyCount > 10) {
+        score -= 5;
+      }
     }
   }
 

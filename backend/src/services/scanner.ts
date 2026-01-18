@@ -5,6 +5,7 @@ import { checkSafeBrowsing } from './safeBrowsing';
 import { checkReverseDns } from './reverseDns';
 import { checkPorts } from './portScan';
 import { checkIpReputation } from './ipReputation';
+import { runDockerScan } from './docker/docker';
 import { checkSecurityHeaders } from './securityHeaders';
 import { checkCookieSecurity } from './cookieSecurity';
 import { checkSensitiveFiles } from './sensitiveFiles';
@@ -284,7 +285,12 @@ export async function scanUrl(
     }
   }
 
-  // Step 9: Security Headers Check
+  // Step 9: Docker Sandbox Scan (Network Analysis)
+  onProgress({
+    step: 'dockerScan',
+    message: 'Running sandboxed browser analysis...',
+    
+  // Step 10: Security Headers Check
   onProgress({
     step: 'securityHeaders',
     message: 'Checking HTTP security headers...',
@@ -292,6 +298,29 @@ export async function scanUrl(
   });
 
   try {
+    const dockerData = await runDockerScan(url);
+    results.checks.dockerScan = dockerData;
+
+    if (!dockerData.success) {
+      onProgress({
+        step: 'dockerScan',
+        message: `Sandbox scan failed: ${dockerData.error || 'Unknown error'}`,
+        status: 'warning',
+        data: dockerData,
+      });
+    } else if (dockerData.suspiciousRequests.length > 0) {
+      onProgress({
+        step: 'dockerScan',
+        message: `Found ${dockerData.suspiciousRequests.length} suspicious network requests`,
+        status: 'error',
+        data: dockerData,
+      });
+    } else {
+      onProgress({
+        step: 'dockerScan',
+        message: `Analyzed ${dockerData.totalRequests} network requests. No threats detected.`,
+        status: 'success',
+        data: dockerData,
     const headersData = await checkSecurityHeaders(url);
     results.checks.securityHeaders = headersData;
 
@@ -360,6 +389,8 @@ export async function scanUrl(
     }
   } catch (e) {
     onProgress({
+      step: 'dockerScan',
+      message: 'Could not run sandbox analysis (is Docker running?)',
       step: 'cookieSecurity',
       message: 'Could not analyze cookies',
       status: 'warning',
