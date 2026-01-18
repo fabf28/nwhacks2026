@@ -6,6 +6,11 @@ import { checkReverseDns } from './reverseDns';
 import { checkPorts } from './portScan';
 import { checkIpReputation } from './ipReputation';
 import { runDockerScan } from './docker/docker';
+import { checkSecurityHeaders } from './securityHeaders';
+import { checkCookieSecurity } from './cookieSecurity';
+import { checkSensitiveFiles } from './sensitiveFiles';
+import { checkVersionDisclosure } from './versionDisclosure';
+import { checkAdminPanels } from './adminPanels';
 import { calculateScore, ScanResult } from './scoring';
 
 export interface ProgressUpdate {
@@ -18,6 +23,7 @@ export interface ProgressUpdate {
 export async function scanUrl(
   url: string,
   onProgress: (update: ProgressUpdate) => void,
+  deepScan: boolean = false,
 ): Promise<ScanResult> {
   const results: ScanResult = {
     url,
@@ -283,6 +289,11 @@ export async function scanUrl(
   onProgress({
     step: 'dockerScan',
     message: 'Running sandboxed browser analysis...',
+    
+  // Step 10: Security Headers Check
+  onProgress({
+    step: 'securityHeaders',
+    message: 'Checking HTTP security headers...',
     status: 'pending',
   });
 
@@ -310,15 +321,201 @@ export async function scanUrl(
         message: `Analyzed ${dockerData.totalRequests} network requests. No threats detected.`,
         status: 'success',
         data: dockerData,
+    const headersData = await checkSecurityHeaders(url);
+    results.checks.securityHeaders = headersData;
+
+    if (headersData.grade === 'F' || headersData.grade === 'D') {
+      onProgress({
+        step: 'securityHeaders',
+        message: `Security headers: Grade ${headersData.grade} (${headersData.score}/100)`,
+        status: 'error',
+        data: headersData,
+      });
+    } else if (headersData.grade === 'C') {
+      onProgress({
+        step: 'securityHeaders',
+        message: `Security headers: Grade ${headersData.grade} (${headersData.score}/100)`,
+        status: 'warning',
+        data: headersData,
+      });
+    } else {
+      onProgress({
+        step: 'securityHeaders',
+        message: `Security headers: Grade ${headersData.grade} (${headersData.score}/100)`,
+        status: 'success',
+        data: headersData,
+      });
+    }
+  } catch (e) {
+    onProgress({
+      step: 'securityHeaders',
+      message: 'Could not check security headers',
+      status: 'warning',
+    });
+  }
+
+  // Step 10: Cookie Security Check
+  onProgress({
+    step: 'cookieSecurity',
+    message: 'Analyzing cookie security...',
+    status: 'pending',
+  });
+
+  try {
+    const cookieData = await checkCookieSecurity(url);
+    results.checks.cookieSecurity = cookieData;
+
+    if (cookieData.totalCookies === 0) {
+      onProgress({
+        step: 'cookieSecurity',
+        message: 'No cookies set by server',
+        status: 'success',
+        data: cookieData,
+      });
+    } else if (cookieData.hasIssues) {
+      onProgress({
+        step: 'cookieSecurity',
+        message: `${cookieData.secureCookies}/${cookieData.totalCookies} cookies are secure`,
+        status: 'warning',
+        data: cookieData,
+      });
+    } else {
+      onProgress({
+        step: 'cookieSecurity',
+        message: `All ${cookieData.totalCookies} cookies are secure`,
+        status: 'success',
+        data: cookieData,
       });
     }
   } catch (e) {
     onProgress({
       step: 'dockerScan',
       message: 'Could not run sandbox analysis (is Docker running?)',
+      step: 'cookieSecurity',
+      message: 'Could not analyze cookies',
       status: 'warning',
     });
   }
+
+  // Deep Scan: Vulnerability Checks (only if enabled)
+  if (deepScan) {
+    // Step 11: Vulnerability Scanning - Sensitive Files
+    onProgress({
+      step: 'sensitiveFiles',
+      message: 'Scanning for exposed sensitive files...',
+      status: 'pending',
+    });
+
+    try {
+      const sensitiveFilesData = await checkSensitiveFiles(url);
+      results.checks.sensitiveFiles = sensitiveFilesData;
+
+      if (sensitiveFilesData.criticalCount > 0) {
+        onProgress({
+          step: 'sensitiveFiles',
+          message: `CRITICAL: ${sensitiveFilesData.criticalCount} sensitive files exposed!`,
+          status: 'error',
+          data: sensitiveFilesData,
+        });
+      } else if (sensitiveFilesData.hasVulnerabilities) {
+        onProgress({
+          step: 'sensitiveFiles',
+          message: `Found ${sensitiveFilesData.exposedFiles.length} exposed files`,
+          status: 'warning',
+          data: sensitiveFilesData,
+        });
+      } else {
+        onProgress({
+          step: 'sensitiveFiles',
+          message: 'No sensitive files exposed',
+          status: 'success',
+          data: sensitiveFilesData,
+        });
+      }
+    } catch (e) {
+      onProgress({
+        step: 'sensitiveFiles',
+        message: 'Could not complete file scan',
+        status: 'warning',
+      });
+    }
+
+    // Step 12: Version Disclosure
+    onProgress({
+      step: 'versionDisclosure',
+      message: 'Checking for version disclosure...',
+      status: 'pending',
+    });
+
+    try {
+      const versionData = await checkVersionDisclosure(url);
+      results.checks.versionDisclosure = versionData;
+
+      if (versionData.riskLevel === 'high') {
+        onProgress({
+          step: 'versionDisclosure',
+          message: `Version info leaked: ${versionData.poweredBy || versionData.serverVersion}`,
+          status: 'error',
+          data: versionData,
+        });
+      } else if (versionData.hasDisclosure) {
+        onProgress({
+          step: 'versionDisclosure',
+          message: `Server: ${versionData.serverVersion || 'Hidden'}`,
+          status: 'warning',
+          data: versionData,
+        });
+      } else {
+        onProgress({
+          step: 'versionDisclosure',
+          message: 'No version info disclosed',
+          status: 'success',
+          data: versionData,
+        });
+      }
+    } catch (e) {
+      onProgress({
+        step: 'versionDisclosure',
+        message: 'Could not check version disclosure',
+        status: 'warning',
+      });
+    }
+
+    // Step 13: Admin Panel Detection
+    onProgress({
+      step: 'adminPanels',
+      message: 'Scanning for exposed admin panels...',
+      status: 'pending',
+    });
+
+    try {
+      const adminData = await checkAdminPanels(url);
+      results.checks.adminPanels = adminData;
+
+      if (adminData.hasExposedPanels) {
+        const types = [...new Set(adminData.foundPanels.map(p => p.type))];
+        onProgress({
+          step: 'adminPanels',
+          message: `Found ${adminData.foundPanels.length} endpoints (${types.join(', ')})`,
+          status: 'warning',
+          data: adminData,
+        });
+      } else {
+        onProgress({
+          step: 'adminPanels',
+          message: 'No exposed admin panels found',
+          status: 'success',
+          data: adminData,
+        });
+      }
+    } catch (e) {
+      onProgress({
+        step: 'adminPanels',
+        message: 'Could not scan for admin panels',
+        status: 'warning',
+      });
+    }
+  } // End of deepScan block
 
   // Final Step: Calculate final score
   const finalScore = calculateScore(results);

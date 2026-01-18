@@ -4,6 +4,7 @@ import {
   Search,
   Loader2,
   ShieldCheck,
+  Shield,
   CheckCircle,
   AlertTriangle,
   XCircle,
@@ -31,6 +32,8 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
   const [progressUpdates, setProgressUpdates] = useState<ProgressUpdate[]>([]);
   const [reportData, setReportData] = useState<any>(null);
   const [isFromQR, setIsFromQR] = useState(false);
+  const [deepScan, setDeepScan] = useState(false);
+  const [hasConsent, setHasConsent] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const hasAutoScanned = useRef(false);
 
@@ -75,12 +78,26 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
             : 'Unknown',
           isp: result.checks?.geolocation?.isp || 'Unknown',
           sandboxResult: 'clean',
+          // SSL/TLS details
+          ssl: result.checks?.ssl ? {
+            tlsVersion: result.checks.ssl.tlsVersion,
+            cipher: result.checks.ssl.cipher,
+            cipherStrength: result.checks.ssl.cipherStrength,
+            certificateChain: result.checks.ssl.certificateChain,
+          } : undefined,
           // Network infrastructure data
           reverseDns: result.checks?.reverseDns,
           portScan: result.checks?.portScan,
           ipReputation: result.checks?.ipReputation,
           // Threat intelligence
           safeBrowsing: result.checks?.safeBrowsing,
+          // HTTP Security
+          securityHeaders: result.checks?.securityHeaders,
+          cookieSecurity: result.checks?.cookieSecurity,
+          // Vulnerability data
+          sensitiveFiles: result.checks?.sensitiveFiles,
+          versionDisclosure: result.checks?.versionDisclosure,
+          adminPanels: result.checks?.adminPanels,
         });
         setIsScanning(false);
         onScanComplete?.();
@@ -121,8 +138,20 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
     }
   }, [initialUrl, isConnected]);
 
+  // Normalize URL by adding https:// if no protocol specified
+  const normalizeUrl = (inputUrl: string): string => {
+    let normalized = inputUrl.trim();
+    if (!normalized.match(/^https?:\/\//i)) {
+      normalized = 'https://' + normalized;
+    }
+    return normalized;
+  };
+
   const handleScan = () => {
     if (!url || !socketRef.current) return;
+
+    const normalizedUrl = normalizeUrl(url);
+    setUrl(normalizedUrl); // Update the input field with normalized URL
 
     hasAutoScanned.current = false;
     setIsFromQR(false);
@@ -130,7 +159,10 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
     setReportData(null);
     setProgressUpdates([]);
 
-    socketRef.current.emit('start-scan', { url });
+    socketRef.current.emit('start-scan', {
+      url: normalizedUrl,
+      deepScan: deepScan && hasConsent
+    });
   };
 
   const getStatusIcon = (status: string) => {
@@ -172,7 +204,7 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
         className="glass-card"
         style={{ padding: '40px', textAlign: 'center' }}
       >
-        <h2 style={{ marginBottom: '24px' }}>Deep Scan URL</h2>
+        <h2 style={{ marginBottom: '24px' }}>URL Security Scanner</h2>
         <div style={{ position: 'relative', marginBottom: '24px' }}>
           <input
             type="text"
@@ -192,6 +224,71 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
             }}
             size={20}
           />
+        </div>
+
+        {/* Deep Scan Toggle */}
+        <div style={{
+          marginBottom: '20px',
+          padding: '16px',
+          background: deepScan ? 'rgba(239, 68, 68, 0.1)' : 'rgba(255,255,255,0.03)',
+          borderRadius: '12px',
+          border: deepScan ? '1px solid var(--danger)' : '1px solid var(--glass-border)',
+          transition: 'all 0.3s ease'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: deepScan ? '12px' : '0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Shield size={18} color={deepScan ? 'var(--danger)' : 'var(--text-muted)'} />
+              <span style={{ fontWeight: 600 }}>Deep Vulnerability Scan</span>
+            </div>
+            <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={deepScan}
+                onChange={(e) => {
+                  setDeepScan(e.target.checked);
+                  if (!e.target.checked) setHasConsent(false);
+                }}
+                style={{ opacity: 0, width: 0, height: 0 }}
+              />
+              <span style={{
+                position: 'absolute',
+                inset: 0,
+                backgroundColor: deepScan ? 'var(--danger)' : 'rgba(255,255,255,0.2)',
+                borderRadius: '24px',
+                transition: '0.3s',
+              }}>
+                <span style={{
+                  position: 'absolute',
+                  left: deepScan ? '26px' : '4px',
+                  top: '4px',
+                  width: '16px',
+                  height: '16px',
+                  backgroundColor: 'white',
+                  borderRadius: '50%',
+                  transition: '0.3s',
+                }} />
+              </span>
+            </label>
+          </div>
+
+          {deepScan && (
+            <div style={{ textAlign: 'left' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                Scans for exposed files (.env, .git, backups), admin panels, and version disclosure.
+              </p>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={hasConsent}
+                  onChange={(e) => setHasConsent(e.target.checked)}
+                  style={{ marginTop: '3px', accentColor: 'var(--danger)' }}
+                />
+                <span style={{ fontSize: '0.85rem', color: 'var(--warning)' }}>
+                  I own this website or have explicit permission to perform security testing.
+                </span>
+              </label>
+            </div>
+          )}
         </div>
         <button
           className="neon-button"

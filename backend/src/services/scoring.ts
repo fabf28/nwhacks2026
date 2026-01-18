@@ -1,3 +1,15 @@
+import { SslResult } from './ssl';
+import { SecurityHeadersResult } from './securityHeaders';
+import { CookieSecurityResult } from './cookieSecurity';
+import { GeolocationResult } from './geolocation';
+import { ReverseDnsResult } from './reverseDns';
+import { PortScanResult } from './portScan';
+import { IpReputationResult } from './ipReputation';
+import { SafeBrowsingResult } from './safeBrowsing';
+import { SensitiveFileResult } from './sensitiveFiles';
+import { VersionDisclosureResult } from './versionDisclosure';
+import { AdminPanelResult } from './adminPanels';
+
 export interface ScanResult {
   url: string;
   score: number;
@@ -72,6 +84,18 @@ export interface ScanResult {
       thirdPartyDomains: string[];
       error?: string;
     };
+    ssl?: SslResult;
+    geolocation?: GeolocationResult;
+    safeBrowsing?: SafeBrowsingResult;
+    reverseDns?: ReverseDnsResult;
+    portScan?: PortScanResult;
+    ipReputation?: IpReputationResult;
+    securityHeaders?: SecurityHeadersResult;
+    cookieSecurity?: CookieSecurityResult;
+    // Vulnerability checks
+    sensitiveFiles?: SensitiveFileResult;
+    versionDisclosure?: VersionDisclosureResult;
+    adminPanels?: AdminPanelResult;
   };
 }
 
@@ -95,12 +119,25 @@ export function calculateScore(result: ScanResult): number {
     }
   }
 
-  // SSL scoring
+  // SSL scoring (enhanced)
   if (result.checks.ssl) {
-    if (!result.checks.ssl.valid) {
+    const ssl = result.checks.ssl;
+    if (!ssl.valid) {
       score -= 30; // Invalid SSL
-    } else if (result.checks.ssl.daysUntilExpiry < 7) {
+    } else if (ssl.daysUntilExpiry < 7) {
       score -= 15; // SSL expiring soon
+    }
+
+    // Cipher strength scoring
+    if (ssl.cipherStrength === 'weak') {
+      score -= 20; // Weak cipher
+    } else if (ssl.cipherStrength === 'moderate') {
+      score -= 5; // Moderate cipher
+    }
+
+    // TLS version scoring
+    if (ssl.tlsVersion && !ssl.tlsVersion.includes('1.2') && !ssl.tlsVersion.includes('1.3')) {
+      score -= 15; // Outdated TLS version
     }
   } else {
     score -= 20; // No SSL data available
@@ -161,6 +198,59 @@ export function calculateScore(result: ScanResult): number {
         score -= 5;
       }
     }
+  }
+
+  // Security Headers scoring
+  if (result.checks.securityHeaders) {
+    const headers = result.checks.securityHeaders;
+    if (headers.grade === 'F') {
+      score -= 20;
+    } else if (headers.grade === 'D') {
+      score -= 15;
+    } else if (headers.grade === 'C') {
+      score -= 10;
+    } else if (headers.grade === 'B') {
+      score -= 5;
+    }
+    // Grade A = no penalty
+  }
+
+  // Cookie Security scoring
+  if (result.checks.cookieSecurity && result.checks.cookieSecurity.hasIssues) {
+    const ratio = result.checks.cookieSecurity.secureCookies / result.checks.cookieSecurity.totalCookies;
+    if (ratio < 0.5) {
+      score -= 10; // Less than half cookies are secure
+    } else if (ratio < 1) {
+      score -= 5; // Some cookies have issues
+    }
+  }
+
+  // Vulnerability Scoring - Sensitive Files (CRITICAL)
+  if (result.checks.sensitiveFiles && result.checks.sensitiveFiles.hasVulnerabilities) {
+    const sf = result.checks.sensitiveFiles;
+    score -= sf.criticalCount * 25; // -25 per critical file
+    score -= sf.highCount * 15; // -15 per high severity file
+    score -= (sf.exposedFiles.length - sf.criticalCount - sf.highCount) * 5; // -5 per medium/low
+  }
+
+  // Version Disclosure scoring
+  if (result.checks.versionDisclosure && result.checks.versionDisclosure.hasDisclosure) {
+    const vd = result.checks.versionDisclosure;
+    if (vd.riskLevel === 'high') {
+      score -= 15;
+    } else if (vd.riskLevel === 'medium') {
+      score -= 8;
+    } else {
+      score -= 3;
+    }
+  }
+
+  // Admin Panel scoring (informational, minor penalty)
+  if (result.checks.adminPanels && result.checks.adminPanels.hasExposedPanels) {
+    const adminCount = result.checks.adminPanels.foundPanels.filter(p => p.type === 'admin').length;
+    const debugCount = result.checks.adminPanels.foundPanels.filter(p => p.type === 'debug').length;
+    score -= debugCount * 10; // Debug endpoints are risky
+    score -= adminCount * 3; // Admin panels are common but notable
   }
 
   return Math.max(0, Math.min(100, score));
