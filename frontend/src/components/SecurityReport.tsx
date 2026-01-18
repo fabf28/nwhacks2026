@@ -192,8 +192,8 @@ const SecurityReport: React.FC<{ data: ReportData }> = ({ data }) => {
                 <div className="glass-card" style={cardStyle}>
                     <div style={headerStyle}><Server size={20} color="var(--primary)" /><h3 style={{ fontSize: '1rem' }}>Infrastructure</h3></div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                        <div style={rowStyle}><span style={{ color: 'var(--text-muted)' }}>Location</span><span>{data.serverLocation}</span></div>
-                        <div style={rowStyle}><span style={{ color: 'var(--text-muted)' }}>Hosting</span><span>{data.isp || 'Unknown'}</span></div>
+                        <div style={rowStyle}><span style={{ color: 'var(--text-muted)' }}>Location</span><span style={{ textAlign: 'right', maxWidth: '60%' }}>{data.serverLocation}</span></div>
+                        <div style={rowStyle}><span style={{ color: 'var(--text-muted)' }}>Hosting</span><span style={{ textAlign: 'right', maxWidth: '60%' }}>{data.isp || 'Unknown'}</span></div>
                     </div>
                 </div>
 
@@ -315,8 +315,8 @@ const SecurityReport: React.FC<{ data: ReportData }> = ({ data }) => {
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             {getStatusIcon(data.dockerScan.suspiciousRequests.length > 0 ? 'danger' : 'success')}
                                             <span style={{ color: data.dockerScan.suspiciousRequests.length > 0 ? 'var(--danger)' : 'var(--success)' }}>
-                                                {data.dockerScan.suspiciousRequests.length > 0 
-                                                    ? `${data.dockerScan.suspiciousRequests.length} suspicious` 
+                                                {data.dockerScan.suspiciousRequests.length > 0
+                                                    ? `${data.dockerScan.suspiciousRequests.length} suspicious`
                                                     : `${data.dockerScan.totalRequests} clean`}
                                             </span>
                                         </div>
