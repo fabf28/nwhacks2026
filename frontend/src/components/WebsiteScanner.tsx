@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, CheckCircle, Globe, Lock, Server, Network, Wifi, Shield, ShieldCheck, FileCheck, Cookie, Info } from 'lucide-react';
+import { ArrowRight, CheckCircle, Globe, Lock, Server, Network, Wifi, Shield, ShieldCheck, FileCheck, Cookie, Info, Download, MessageCircle } from 'lucide-react';
+import { generatePDFReport } from '../utils/pdfGenerator';
+import ChatPanel from './ChatPanel';
 import { io, Socket } from 'socket.io-client';
 
 interface ProgressUpdate {
@@ -83,6 +85,7 @@ const ReportRow: React.FC<{ label: string; value: React.ReactNode; color?: strin
 const WebsiteScanner: React.FC<WebsiteScannerProps> = ({ initialUrl }) => {
     const [url, setUrl] = useState('');
     const [stage, setStage] = useState<ScanStage>('input');
+    const [isChatOpen, setIsChatOpen] = useState(false);
     const [progressUpdates, setProgressUpdates] = useState<ProgressUpdate[]>([]);
     const [reportData, setReportData] = useState<any>(null);
     const [activeStepIndex, setActiveStepIndex] = useState(-1);
@@ -112,6 +115,7 @@ const WebsiteScanner: React.FC<WebsiteScannerProps> = ({ initialUrl }) => {
                     serverLocation: result.checks?.geolocation
                         ? `${result.checks.geolocation.city}, ${result.checks.geolocation.country}`
                         : 'Unknown',
+                    sandboxResult: result.score >= 80 ? 'clean' : result.score >= 50 ? 'suspicious' : 'malicious',
                     isp: result.checks?.geolocation?.isp || 'Unknown',
                     // SSL/TLS details
                     ssl: result.checks?.ssl ? {
@@ -149,9 +153,10 @@ const WebsiteScanner: React.FC<WebsiteScannerProps> = ({ initialUrl }) => {
             console.error('Scan error:', error);
             setProgressUpdates((prev) => [...prev, {
                 step: 'error',
-                message: error?.message || 'An error occurred during the scan',
+                message: error,
                 status: 'error'
             }]);
+            setStage('input');
         });
 
         return () => {
@@ -176,15 +181,21 @@ const WebsiteScanner: React.FC<WebsiteScannerProps> = ({ initialUrl }) => {
         return normalized;
     };
 
-    const startScan = (urlToScan: string) => {
-        const normalizedUrl = normalizeUrl(urlToScan);
-        setUrl(normalizedUrl);
+    const startScan = (scanUrl: string) => {
+        // Reset states
         setProgressUpdates([]);
-        setCompletedSteps([]);
+        setReportData(null);
         setActiveStepIndex(0);
+        setCompletedSteps([]);
         setStage('detecting');
 
-        // Show "Website Detected" for 2 seconds
+        // Normalize URL
+        let normalizedUrl = scanUrl.trim();
+        if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+            normalizedUrl = 'https://' + normalizedUrl;
+        }
+
+        // Simulate "detecting" phase for 2 seconds
         setTimeout(() => {
             setStage('scanning');
             socketRef.current?.emit('start-scan', { url: normalizedUrl });
@@ -312,448 +323,516 @@ const WebsiteScanner: React.FC<WebsiteScannerProps> = ({ initialUrl }) => {
                                 <ArrowRight size={24} color="var(--text-lavender)" />
                             </button>
                         </div>
+
                     </motion.div>
                 )}
 
                 {/* Website Detected Stage */}
-                {stage === 'detecting' && (
-                    <motion.div
-                        key="detecting"
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        style={{ textAlign: 'center' }}
-                    >
+                {
+                    stage === 'detecting' && (
                         <motion.div
-                            animate={{ scale: [1, 1.05, 1] }}
-                            transition={{ duration: 1.5, repeat: Infinity }}
+                            key="detecting"
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            style={{ textAlign: 'center' }}
                         >
-                            <p style={{
-                                fontSize: '18px',
-                                color: 'var(--text-main)',
-                                fontWeight: 600
-                            }}>
-                                Website Detected
-                            </p>
-                            <p style={{
-                                fontSize: '14px',
-                                color: 'var(--text-muted)',
-                                marginTop: '8px'
-                            }}>
-                                {url}
-                            </p>
+                            <motion.div
+                                animate={{ scale: [1, 1.05, 1] }}
+                                transition={{ duration: 1.5, repeat: Infinity }}
+                            >
+                                <p style={{
+                                    fontSize: '18px',
+                                    color: 'var(--text-main)',
+                                    fontWeight: 600
+                                }}>
+                                    Website Detected
+                                </p>
+                                <p style={{
+                                    fontSize: '14px',
+                                    color: 'var(--text-muted)',
+                                    marginTop: '8px'
+                                }}>
+                                    {url}
+                                </p>
+                            </motion.div>
                         </motion.div>
-                    </motion.div>
-                )}
+                    )
+                }
 
                 {/* Scanning Stage */}
-                {stage === 'scanning' && (
-                    <motion.div
-                        key="scanning"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '16px'
-                        }}
-                    >
-                        <p style={{
-                            fontSize: '14px',
-                            color: 'var(--text-muted)',
-                            textAlign: 'center',
-                            marginBottom: '16px'
-                        }}>
-                            Running security checks...
-                        </p>
-
-                        {SCANNING_STEPS.map((step, index) => {
-                            const isCompleted = completedSteps.includes(index);
-                            const isActive = index === activeStepIndex;
-
-                            if (!isCompleted && !isActive) return null;
-
-                            return (
-                                <motion.div
-                                    key={step.id}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ duration: 0.3 }}
-                                    className="loading-check"
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '12px',
-                                        padding: '12px 16px',
-                                        background: 'rgba(255, 255, 255, 0.05)',
-                                        borderRadius: '12px',
-                                        border: '1px solid rgba(255, 255, 255, 0.1)'
-                                    }}
-                                >
-                                    {isActive ? (
-                                        <div className="loading-spinner" />
-                                    ) : (
-                                        <CheckCircle size={20} color={step.color} />
-                                    )}
-                                    <span style={{
-                                        color: isActive ? 'var(--text-main)' : step.color,
-                                        fontSize: '14px',
-                                        fontWeight: isActive ? 400 : 500
-                                    }}>
-                                        {isActive ? step.loading : step.result}
-                                    </span>
-                                </motion.div>
-                            );
-                        })}
-                    </motion.div>
-                )}
-
-                {/* Verdict Stage */}
-                {stage === 'verdict' && reportData && (
-                    <motion.div
-                        key="verdict"
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0 }}
-                        style={{ textAlign: 'center' }}
-                    >
-                        <p style={{
-                            fontSize: '14px',
-                            color: 'var(--text-muted)',
-                            marginBottom: '8px'
-                        }}>
-                            {reportData.url}
-                        </p>
-
-                        <div
-                            className="verdict-card"
+                {
+                    stage === 'scanning' && (
+                        <motion.div
+                            key="scanning"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
                             style={{
-                                marginTop: '24px',
-                                marginBottom: '32px',
-                                background: `linear-gradient(135deg, ${getVerdictColor(reportData.score).color}20 0%, ${getVerdictColor(reportData.score).color}05 100%)`,
-                                border: `2px solid ${getVerdictColor(reportData.score).color}`,
-                                boxShadow: getVerdictColor(reportData.score).glow
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '16px'
                             }}
                         >
                             <p style={{
-                                fontSize: '12px',
+                                fontSize: '14px',
                                 color: 'var(--text-muted)',
-                                textTransform: 'uppercase',
-                                letterSpacing: '1.5px',
-                                marginBottom: '8px'
+                                textAlign: 'center',
+                                marginBottom: '16px'
                             }}>
-                                🚨 Risk Detected
+                                Running security checks...
                             </p>
 
+                            {SCANNING_STEPS.map((step, index) => {
+                                const isCompleted = completedSteps.includes(index);
+                                const isActive = index === activeStepIndex;
+
+                                if (!isCompleted && !isActive) return null;
+
+                                return (
+                                    <motion.div
+                                        key={step.id}
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ duration: 0.3 }}
+                                        className="loading-check"
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '12px',
+                                            padding: '12px 16px',
+                                            background: 'rgba(255, 255, 255, 0.05)',
+                                            borderRadius: '12px',
+                                            border: '1px solid rgba(255, 255, 255, 0.1)'
+                                        }}
+                                    >
+                                        {isActive ? (
+                                            <div className="loading-spinner" />
+                                        ) : (
+                                            <CheckCircle size={20} color={step.color} />
+                                        )}
+                                        <span style={{
+                                            color: isActive ? 'var(--text-main)' : step.color,
+                                            fontSize: '14px',
+                                            fontWeight: isActive ? 400 : 500
+                                        }}>
+                                            {isActive ? step.loading : step.result}
+                                        </span>
+                                    </motion.div>
+                                );
+                            })}
+                        </motion.div>
+                    )
+                }
+
+                {/* Verdict Stage */}
+                {
+                    stage === 'verdict' && reportData && (
+                        <motion.div
+                            key="verdict"
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0 }}
+                            style={{ textAlign: 'center' }}
+                        >
                             <p style={{
                                 fontSize: '14px',
-                                color: 'var(--text-main)',
+                                color: 'var(--text-muted)',
                                 marginBottom: '8px'
                             }}>
-                                And the verdict is...
+                                {reportData.url}
                             </p>
 
                             <div
-                                className="verdict-percentage"
+                                className="verdict-card"
                                 style={{
-                                    color: getVerdictColor(reportData.score).color,
-                                    textShadow: getVerdictColor(reportData.score).glow
+                                    marginTop: '24px',
+                                    marginBottom: '32px',
+                                    background: `linear-gradient(135deg, ${getVerdictColor(reportData.score).color}20 0%, ${getVerdictColor(reportData.score).color}05 100%)`,
+                                    border: `2px solid ${getVerdictColor(reportData.score).color}`,
+                                    boxShadow: getVerdictColor(reportData.score).glow
                                 }}
                             >
-                                {calculateMaliciousPercentage(reportData.score)}%
+                                <p style={{
+                                    fontSize: '12px',
+                                    color: 'var(--text-muted)',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '1.5px',
+                                    marginBottom: '8px'
+                                }}>
+                                    🚨 Risk Detected
+                                </p>
+
+                                <p style={{
+                                    fontSize: '14px',
+                                    color: 'var(--text-main)',
+                                    marginBottom: '8px'
+                                }}>
+                                    And the verdict is...
+                                </p>
+
+                                <div
+                                    className="verdict-percentage"
+                                    style={{
+                                        color: getVerdictColor(reportData.score).color,
+                                        textShadow: getVerdictColor(reportData.score).glow
+                                    }}
+                                >
+                                    {calculateMaliciousPercentage(reportData.score)}%
+                                </div>
+
+                                <p style={{
+                                    fontSize: '14px',
+                                    color: 'var(--text-main)',
+                                    marginTop: '12px'
+                                }}>
+                                    {getVerdictMessage(reportData.score)}
+                                </p>
                             </div>
+
+                            <button
+                                className="primary-button"
+                                onClick={() => setStage('report')}
+                            >
+                                View Full Report
+                            </button>
+                        </motion.div>
+                    )
+                }
+
+                {/* Full Report Stage - Scrollable with all metrics */}
+                {
+                    stage === 'report' && reportData && (
+                        <motion.div
+                            key="report"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0 }}
+                            style={{
+                                maxHeight: '700px',
+                                overflowY: 'auto',
+                                paddingRight: '8px'
+                            }}
+                        >
+                            <h2 style={{
+                                fontSize: '16px',
+                                textTransform: 'uppercase',
+                                letterSpacing: '1.5px',
+                                marginBottom: '24px',
+                                textAlign: 'center'
+                            }}>
+                                Security Intelligence Report
+                            </h2>
 
                             <p style={{
                                 fontSize: '14px',
-                                color: 'var(--text-main)',
-                                marginTop: '12px'
+                                color: 'var(--text-muted)',
+                                textAlign: 'center',
+                                marginBottom: '32px'
                             }}>
-                                {getVerdictMessage(reportData.score)}
+                                {reportData.url}
                             </p>
-                        </div>
 
-                        <button
-                            className="primary-button"
-                            onClick={() => setStage('report')}
-                        >
-                            View Full Report
-                        </button>
-                    </motion.div>
-                )}
-
-                {/* Full Report Stage - Scrollable with all metrics */}
-                {stage === 'report' && reportData && (
-                    <motion.div
-                        key="report"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        style={{
-                            maxHeight: '700px',
-                            overflowY: 'auto',
-                            paddingRight: '8px'
-                        }}
-                    >
-                        <h2 style={{
-                            fontSize: '16px',
-                            textTransform: 'uppercase',
-                            letterSpacing: '1.5px',
-                            marginBottom: '24px',
-                            textAlign: 'center'
-                        }}>
-                            Security Intelligence Report
-                        </h2>
-
-                        <p style={{
-                            fontSize: '14px',
-                            color: 'var(--text-muted)',
-                            textAlign: 'center',
-                            marginBottom: '32px'
-                        }}>
-                            {reportData.url}
-                        </p>
-
-                        {/* Domain Information */}
-                        <div className="report-section">
-                            <h3><Globe size={16} style={{ display: 'inline', marginRight: '8px' }} />Domain Information</h3>
-                            <div className="glass-card" style={{ padding: '16px' }}>
-                                <ReportRow label="Created" value={reportData.domainAge} />
-                                <ReportRow label="Registrar" value={reportData.registrar} />
-                            </div>
-                        </div>
-
-                        {/* SSL/TLS Certificate */}
-                        <div className="report-section">
-                            <h3><Lock size={16} style={{ display: 'inline', marginRight: '8px' }} />SSL/TLS Certificate</h3>
-                            <div className="glass-card" style={{ padding: '16px' }}>
-                                <ReportRow
-                                    label="Status"
-                                    value={reportData.sslStatus?.toUpperCase()}
-                                    color={reportData.sslStatus === 'valid' ? 'var(--success-green)' : 'var(--danger-red)'}
-                                />
-                                {reportData.ssl && (
-                                    <>
-                                        <ReportRow label="TLS Version" value={reportData.ssl.tlsVersion} />
-                                        <ReportRow
-                                            label="Cipher Strength"
-                                            value={reportData.ssl.cipherStrength?.toUpperCase()}
-                                            color={reportData.ssl.cipherStrength === 'strong' ? 'var(--success-green)' :
-                                                reportData.ssl.cipherStrength === 'moderate' ? 'var(--warning-gold)' : 'var(--danger-red)'}
-                                        />
-                                    </>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Infrastructure */}
-                        <div className="report-section">
-                            <h3><Server size={16} style={{ display: 'inline', marginRight: '8px' }} />Infrastructure</h3>
-                            <div className="glass-card" style={{ padding: '16px' }}>
-                                <ReportRow label="Location" value={reportData.serverLocation} />
-                                <ReportRow label="Hosting" value={reportData.isp} />
-                            </div>
-                        </div>
-
-                        {/* Reverse DNS */}
-                        {reportData.reverseDns && (
+                            {/* Domain Information */}
                             <div className="report-section">
-                                <h3><Network size={16} style={{ display: 'inline', marginRight: '8px' }} />Reverse DNS</h3>
+                                <h3><Globe size={16} style={{ display: 'inline', marginRight: '8px' }} />Domain Information</h3>
                                 <div className="glass-card" style={{ padding: '16px' }}>
-                                    <ReportRow
-                                        label="PTR Match"
-                                        value={reportData.reverseDns.matches ? 'VERIFIED' : 'NO MATCH'}
-                                        color={reportData.reverseDns.matches ? 'var(--success-green)' : 'var(--warning-gold)'}
-                                    />
+                                    <ReportRow label="Created" value={reportData.domainAge} />
+                                    <ReportRow label="Registrar" value={reportData.registrar} />
                                 </div>
                             </div>
-                        )}
 
-                        {/* Port Scan */}
-                        {reportData.portScan && (
+                            {/* SSL/TLS Certificate */}
                             <div className="report-section">
-                                <h3><Wifi size={16} style={{ display: 'inline', marginRight: '8px' }} />Port Scan</h3>
+                                <h3><Lock size={16} style={{ display: 'inline', marginRight: '8px' }} />SSL/TLS Certificate</h3>
                                 <div className="glass-card" style={{ padding: '16px' }}>
                                     <ReportRow
                                         label="Status"
-                                        value={reportData.portScan.isSuspicious ? 'SUSPICIOUS' : 'CLEAN'}
-                                        color={reportData.portScan.isSuspicious ? 'var(--warning-gold)' : 'var(--success-green)'}
+                                        value={reportData.sslStatus?.toUpperCase()}
+                                        color={reportData.sslStatus === 'valid' ? 'var(--success-green)' : 'var(--danger-red)'}
                                     />
-                                    {reportData.portScan.openPorts && (
-                                        <ReportRow label="Open Ports" value={reportData.portScan.openPorts.join(', ')} />
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* IP Reputation */}
-                        {reportData.ipReputation && (
-                            <div className="report-section">
-                                <h3><Shield size={16} style={{ display: 'inline', marginRight: '8px' }} />IP Reputation</h3>
-                                <div className="glass-card" style={{ padding: '16px' }}>
-                                    <ReportRow
-                                        label="Abuse Score"
-                                        value={`${reportData.ipReputation.abuseConfidenceScore}%`}
-                                        color={reportData.ipReputation.abuseConfidenceScore > 25 ? 'var(--danger-red)' : 'var(--success-green)'}
-                                    />
-                                    <ReportRow label="Total Reports" value={reportData.ipReputation.totalReports} />
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Google Safe Browsing */}
-                        {reportData.safeBrowsing && (
-                            <div className="report-section">
-                                <h3><ShieldCheck size={16} style={{ display: 'inline', marginRight: '8px' }} />Google Safe Browsing</h3>
-                                <div className="glass-card" style={{ padding: '16px' }}>
-                                    <ReportRow
-                                        label="Threat Check"
-                                        value={reportData.safeBrowsing.isSafe ? 'CLEAN' : 'THREAT'}
-                                        color={reportData.safeBrowsing.isSafe ? 'var(--success-green)' : 'var(--danger-red)'}
-                                    />
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Security Headers */}
-                        {reportData.securityHeaders && (
-                            <div className="report-section">
-                                <h3><FileCheck size={16} style={{ display: 'inline', marginRight: '8px' }} />Security Headers</h3>
-                                <div className="glass-card" style={{ padding: '16px' }}>
-                                    <ReportRow
-                                        label="Grade"
-                                        value={`${reportData.securityHeaders.grade} (${reportData.securityHeaders.score}/100)`}
-                                        color={['A', 'B'].includes(reportData.securityHeaders.grade) ? 'var(--success-green)' :
-                                            reportData.securityHeaders.grade === 'C' ? 'var(--warning-gold)' : 'var(--danger-red)'}
-                                    />
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Cookie Security */}
-                        {reportData.cookieSecurity && (
-                            <div className="report-section">
-                                <h3><Cookie size={16} style={{ display: 'inline', marginRight: '8px' }} />Cookie Security</h3>
-                                <div className="glass-card" style={{ padding: '16px' }}>
-                                    <ReportRow
-                                        label="Status"
-                                        value={reportData.cookieSecurity.totalCookies === 0 ? 'No cookies' :
-                                            `${reportData.cookieSecurity.secureCookies}/${reportData.cookieSecurity.totalCookies} secure`}
-                                        color={reportData.cookieSecurity.hasIssues ? 'var(--warning-gold)' : 'var(--success-green)'}
-                                    />
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Docker Sandbox */}
-                        {reportData.dockerScan && (
-                            <div className="report-section">
-                                <h3><ShieldCheck size={16} style={{ display: 'inline', marginRight: '8px' }} />Virtual Sandbox</h3>
-                                <div className="glass-card" style={{ padding: '16px' }}>
-                                    {reportData.dockerScan.success ? (
+                                    {reportData.ssl && (
                                         <>
+                                            <ReportRow label="TLS Version" value={reportData.ssl.tlsVersion} />
                                             <ReportRow
-                                                label="Network Requests"
-                                                value={reportData.dockerScan.suspiciousRequests.length > 0
-                                                    ? `${reportData.dockerScan.suspiciousRequests.length} suspicious`
-                                                    : `${reportData.dockerScan.totalRequests} clean`}
-                                                color={reportData.dockerScan.suspiciousRequests.length > 0 ? 'var(--danger-red)' : 'var(--success-green)'}
+                                                label="Cipher Strength"
+                                                value={reportData.ssl.cipherStrength?.toUpperCase()}
+                                                color={reportData.ssl.cipherStrength === 'strong' ? 'var(--success-green)' :
+                                                    reportData.ssl.cipherStrength === 'moderate' ? 'var(--warning-gold)' : 'var(--danger-red)'}
                                             />
-                                            <ReportRow label="Third-Party Domains" value={reportData.dockerScan.thirdPartyDomains.length} />
                                         </>
-                                    ) : (
-                                        <ReportRow label="Status" value="Unavailable" color="var(--warning-gold)" />
                                     )}
                                 </div>
                             </div>
-                        )}
 
-                        {/* Vulnerabilities Section */}
-                        {(reportData.sensitiveFiles?.hasVulnerabilities ||
-                            reportData.versionDisclosure?.hasDisclosure ||
-                            reportData.adminPanels?.hasExposedPanels) && (
+                            {/* Infrastructure */}
+                            <div className="report-section">
+                                <h3><Server size={16} style={{ display: 'inline', marginRight: '8px' }} />Infrastructure</h3>
+                                <div className="glass-card" style={{ padding: '16px' }}>
+                                    <ReportRow label="Location" value={reportData.serverLocation} />
+                                    <ReportRow label="Hosting" value={reportData.isp} />
+                                </div>
+                            </div>
+
+                            {/* Reverse DNS */}
+                            {reportData.reverseDns && (
                                 <div className="report-section">
-                                    <h3 style={{ color: 'var(--danger-red)' }}>🚨 Vulnerabilities Detected</h3>
-
-                                    {reportData.sensitiveFiles?.hasVulnerabilities && (
-                                        <div className="glass-card" style={{
-                                            padding: '16px',
-                                            background: 'rgba(255, 77, 109, 0.1)',
-                                            border: '1px solid var(--danger-red)',
-                                            marginBottom: '12px'
-                                        }}>
-                                            <h4 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--danger-red)' }}>
-                                                Exposed Sensitive Files ({reportData.sensitiveFiles.criticalCount} critical, {reportData.sensitiveFiles.highCount} high)
-                                            </h4>
-                                            {reportData.sensitiveFiles.exposedFiles.slice(0, 3).map((file: any, i: number) => (
-                                                <div key={i} style={{ fontSize: '12px', marginBottom: '6px' }}>
-                                                    <code style={{ color: 'var(--primary-neon-pink)' }}>{file.path}</code>
-                                                    <span style={{
-                                                        marginLeft: '8px',
-                                                        color: file.severity === 'critical' ? 'var(--danger-red)' : 'var(--warning-gold)',
-                                                        textTransform: 'uppercase',
-                                                        fontSize: '10px'
-                                                    }}>
-                                                        {file.severity}
-                                                    </span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {reportData.versionDisclosure?.hasDisclosure && (
-                                        <div className="glass-card" style={{
-                                            padding: '16px',
-                                            background: 'rgba(255, 215, 0, 0.1)',
-                                            border: '1px solid var(--warning-gold)',
-                                            marginBottom: '12px'
-                                        }}>
-                                            <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--warning-gold)' }}>
-                                                ⚠️ Version Information Leaked
-                                            </h4>
-                                            {reportData.versionDisclosure.serverVersion && (
-                                                <div style={{ fontSize: '12px' }}>Server: <code>{reportData.versionDisclosure.serverVersion}</code></div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {reportData.adminPanels?.hasExposedPanels && (
-                                        <div className="glass-card" style={{
-                                            padding: '16px',
-                                            background: 'rgba(255, 215, 0, 0.1)',
-                                            border: '1px solid var(--warning-gold)'
-                                        }}>
-                                            <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--warning-gold)' }}>
-                                                📍 Exposed Endpoints ({reportData.adminPanels.foundPanels.length} found)
-                                            </h4>
-                                            {reportData.adminPanels.foundPanels.map((panel: any, i: number) => (
-                                                <div key={i} style={{ fontSize: '12px', marginBottom: '4px' }}>
-                                                    <code>{panel.path}</code> <span style={{ color: 'var(--text-muted)' }}>({panel.type})</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
+                                    <h3><Network size={16} style={{ display: 'inline', marginRight: '8px' }} />Reverse DNS</h3>
+                                    <div className="glass-card" style={{ padding: '16px' }}>
+                                        <ReportRow
+                                            label="PTR Match"
+                                            value={reportData.reverseDns.matches ? 'VERIFIED' : 'NO MATCH'}
+                                            color={reportData.reverseDns.matches ? 'var(--success-green)' : 'var(--warning-gold)'}
+                                        />
+                                    </div>
                                 </div>
                             )}
 
-                        <button
-                            className="primary-button"
-                            onClick={() => {
-                                setStage('input');
-                                setUrl('');
-                                setReportData(null);
-                                setProgressUpdates([]);
-                                setCompletedSteps([]);
-                                setActiveStepIndex(0);
-                            }}
-                            style={{ marginTop: '24px' }}
-                        >
-                            Scan Another Website
-                        </button>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
+                            {/* Port Scan */}
+                            {reportData.portScan && (
+                                <div className="report-section">
+                                    <h3><Wifi size={16} style={{ display: 'inline', marginRight: '8px' }} />Port Scan</h3>
+                                    <div className="glass-card" style={{ padding: '16px' }}>
+                                        <ReportRow
+                                            label="Status"
+                                            value={reportData.portScan.isSuspicious ? 'SUSPICIOUS' : 'CLEAN'}
+                                            color={reportData.portScan.isSuspicious ? 'var(--warning-gold)' : 'var(--success-green)'}
+                                        />
+                                        {reportData.portScan.openPorts && (
+                                            <ReportRow label="Open Ports" value={reportData.portScan.openPorts.join(', ')} />
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* IP Reputation */}
+                            {reportData.ipReputation && (
+                                <div className="report-section">
+                                    <h3><Shield size={16} style={{ display: 'inline', marginRight: '8px' }} />IP Reputation</h3>
+                                    <div className="glass-card" style={{ padding: '16px' }}>
+                                        <ReportRow
+                                            label="Abuse Score"
+                                            value={`${reportData.ipReputation.abuseConfidenceScore}%`}
+                                            color={reportData.ipReputation.abuseConfidenceScore > 25 ? 'var(--danger-red)' : 'var(--success-green)'}
+                                        />
+                                        <ReportRow label="Total Reports" value={reportData.ipReputation.totalReports} />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Google Safe Browsing */}
+                            {reportData.safeBrowsing && (
+                                <div className="report-section">
+                                    <h3><ShieldCheck size={16} style={{ display: 'inline', marginRight: '8px' }} />Google Safe Browsing</h3>
+                                    <div className="glass-card" style={{ padding: '16px' }}>
+                                        <ReportRow
+                                            label="Threat Check"
+                                            value={reportData.safeBrowsing.isSafe ? 'CLEAN' : 'THREAT'}
+                                            color={reportData.safeBrowsing.isSafe ? 'var(--success-green)' : 'var(--danger-red)'}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Security Headers */}
+                            {reportData.securityHeaders && (
+                                <div className="report-section">
+                                    <h3><FileCheck size={16} style={{ display: 'inline', marginRight: '8px' }} />Security Headers</h3>
+                                    <div className="glass-card" style={{ padding: '16px' }}>
+                                        <ReportRow
+                                            label="Grade"
+                                            value={`${reportData.securityHeaders.grade} (${reportData.securityHeaders.score}/100)`}
+                                            color={['A', 'B'].includes(reportData.securityHeaders.grade) ? 'var(--success-green)' :
+                                                reportData.securityHeaders.grade === 'C' ? 'var(--warning-gold)' : 'var(--danger-red)'}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Cookie Security */}
+                            {reportData.cookieSecurity && (
+                                <div className="report-section">
+                                    <h3><Cookie size={16} style={{ display: 'inline', marginRight: '8px' }} />Cookie Security</h3>
+                                    <div className="glass-card" style={{ padding: '16px' }}>
+                                        <ReportRow
+                                            label="Status"
+                                            value={reportData.cookieSecurity.totalCookies === 0 ? 'No cookies' :
+                                                `${reportData.cookieSecurity.secureCookies}/${reportData.cookieSecurity.totalCookies} secure`}
+                                            color={reportData.cookieSecurity.hasIssues ? 'var(--warning-gold)' : 'var(--success-green)'}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Docker Sandbox */}
+                            {reportData.dockerScan && (
+                                <div className="report-section">
+                                    <h3><ShieldCheck size={16} style={{ display: 'inline', marginRight: '8px' }} />Virtual Sandbox</h3>
+                                    <div className="glass-card" style={{ padding: '16px' }}>
+                                        {reportData.dockerScan.success ? (
+                                            <>
+                                                <ReportRow
+                                                    label="Network Requests"
+                                                    value={reportData.dockerScan.suspiciousRequests.length > 0
+                                                        ? `${reportData.dockerScan.suspiciousRequests.length} suspicious`
+                                                        : `${reportData.dockerScan.totalRequests} clean`}
+                                                    color={reportData.dockerScan.suspiciousRequests.length > 0 ? 'var(--danger-red)' : 'var(--success-green)'}
+                                                />
+                                                <ReportRow label="Third-Party Domains" value={reportData.dockerScan.thirdPartyDomains.length} />
+                                            </>
+                                        ) : (
+                                            <ReportRow label="Status" value="Unavailable" color="var(--warning-gold)" />
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Vulnerabilities Section */}
+                            {(reportData.sensitiveFiles?.hasVulnerabilities ||
+                                reportData.versionDisclosure?.hasDisclosure ||
+                                reportData.adminPanels?.hasExposedPanels) && (
+                                    <div className="report-section">
+                                        <h3 style={{ color: 'var(--danger-red)' }}>🚨 Vulnerabilities Detected</h3>
+
+                                        {reportData.sensitiveFiles?.hasVulnerabilities && (
+                                            <div className="glass-card" style={{
+                                                padding: '16px',
+                                                background: 'rgba(255, 77, 109, 0.1)',
+                                                border: '1px solid var(--danger-red)',
+                                                marginBottom: '12px'
+                                            }}>
+                                                <h4 style={{ fontSize: '14px', marginBottom: '12px', color: 'var(--danger-red)' }}>
+                                                    Exposed Sensitive Files ({reportData.sensitiveFiles.criticalCount} critical, {reportData.sensitiveFiles.highCount} high)
+                                                </h4>
+                                                {reportData.sensitiveFiles.exposedFiles.slice(0, 3).map((file: any, i: number) => (
+                                                    <div key={i} style={{ fontSize: '12px', marginBottom: '6px' }}>
+                                                        <code style={{ color: 'var(--primary-neon-pink)' }}>{file.path}</code>
+                                                        <span style={{
+                                                            marginLeft: '8px',
+                                                            color: file.severity === 'critical' ? 'var(--danger-red)' : 'var(--warning-gold)',
+                                                            textTransform: 'uppercase',
+                                                            fontSize: '10px'
+                                                        }}>
+                                                            {file.severity}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        {reportData.versionDisclosure?.hasDisclosure && (
+                                            <div className="glass-card" style={{
+                                                padding: '16px',
+                                                background: 'rgba(255, 215, 0, 0.1)',
+                                                border: '1px solid var(--warning-gold)',
+                                                marginBottom: '12px'
+                                            }}>
+                                                <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--warning-gold)' }}>
+                                                    ⚠️ Version Information Leaked
+                                                </h4>
+                                                {reportData.versionDisclosure.serverVersion && (
+                                                    <div style={{ fontSize: '12px' }}>Server: <code>{reportData.versionDisclosure.serverVersion}</code></div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {reportData.adminPanels?.hasExposedPanels && (
+                                            <div className="glass-card" style={{
+                                                padding: '16px',
+                                                background: 'rgba(255, 215, 0, 0.1)',
+                                                border: '1px solid var(--warning-gold)'
+                                            }}>
+                                                <h4 style={{ fontSize: '14px', marginBottom: '8px', color: 'var(--warning-gold)' }}>
+                                                    📍 Exposed Endpoints ({reportData.adminPanels.foundPanels.length} found)
+                                                </h4>
+                                                {reportData.adminPanels.foundPanels.map((panel: any, i: number) => (
+                                                    <div key={i} style={{ fontSize: '12px', marginBottom: '4px' }}>
+                                                        <code>{panel.path}</code> <span style={{ color: 'var(--text-muted)' }}>({panel.type})</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                            {/* Report Actions */}
+                            <div style={{ marginTop: '32px', display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                <button
+                                    className="neon-button"
+                                    onClick={() => {
+                                        try {
+                                            console.log("Generating PDF report...", reportData);
+                                            generatePDFReport(reportData);
+                                            console.log("PDF generated successfully.");
+                                        } catch (e) {
+                                            console.error("PDF generation error:", e);
+                                            alert("Failed to download report. Please try again.");
+                                        }
+                                    }}
+                                    style={{
+                                        background: 'rgba(255,255,255,0.05)',
+                                        color: 'white',
+                                        border: '1px solid var(--glass-border)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        padding: '12px 24px',
+                                        borderRadius: '12px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <Download size={18} />
+                                    Download Report
+                                </button>
+                                <button
+                                    className="neon-button"
+                                    onClick={() => setIsChatOpen(true)}
+                                    style={{
+                                        background: 'linear-gradient(135deg, var(--primary-neon-pink) 0%, var(--primary-purple) 100%)',
+                                        color: 'white',
+                                        border: 'none',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        fontWeight: 600,
+                                        padding: '12px 24px',
+                                        borderRadius: '12px',
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    <MessageCircle size={18} />
+                                    Ask AI Assistant
+                                </button>
+                            </div>
+
+                            <button
+                                className="primary-button"
+                                onClick={() => {
+                                    setStage('input');
+                                    setUrl('');
+                                    setReportData(null);
+                                    setProgressUpdates([]);
+                                    setCompletedSteps([]);
+                                    setActiveStepIndex(0);
+                                }}
+                                style={{ marginTop: '24px' }}
+                            >
+                                Scan Another Website
+                            </button>
+                        </motion.div>
+                    )
+                }
+            </AnimatePresence >
+
+            {/* AI Chat Panel */}
+            {reportData && (
+                <ChatPanel
+                    scanContext={reportData}
+                    isOpen={isChatOpen}
+                    onClose={() => setIsChatOpen(false)}
+                />
+            )}
+        </div >
     );
 };
 
