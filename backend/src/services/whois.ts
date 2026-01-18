@@ -5,32 +5,9 @@ export interface WhoisResult {
 }
 
 export async function checkWhois(hostname: string): Promise<WhoisResult> {
-    // For hackathon: Use a free WHOIS API or mock data
-    // Real implementation would use: https://www.whoisxmlapi.com/ or similar
 
-    // // Mock implementation - in production, replace with actual API call
-    // const knownDomains: Record<string, WhoisResult> = {
-    //     'https://google.com': {
-    //         createdDate: '1997-09-15',
-    //         ageInDays: 10000,
-    //         registrar: 'MarkMonitor Inc.',
-    //     },
-    //     'facebook.com': {
-    //         createdDate: '1997-03-29',
-    //         ageInDays: 10000,
-    //         registrar: 'RegistrarSafe, LLC',
-    //     },
-    // };
-
-    // // Check if it's a known domain
-    // if (knownDomains[hostname]) {
-    //     console.log("-----------------------------------------------------");
-    //     console.log(knownDomains[hostname]);
-    //     return knownDomains[hostname];
-    // }
-
-
-    const res = await fetch("https://api.ip2whois.com/v2?key=9CB0EFE8D76E575699E348105B5E6141&domain={domain_name}");
+    const api_key = process.env.WHOIS_API_KEY;
+    const res = await fetch(`https://api.ip2whois.com/v2?key=${api_key}&domain=${hostname}`);
 
     if (!res.ok) {
         throw new Error("Request failed");
@@ -39,20 +16,26 @@ export async function checkWhois(hostname: string): Promise<WhoisResult> {
     console.log(res.json);
     const data = await res.json();
     const whoisData = createResult(data);
-    return data; // ← JSON object
+    return whoisData; // ← JSON object
+}
 
-    console.log("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
-    // For unknown domains, simulate a lookup with random age
-    // In production: call actual WHOIS API
-    const randomAge = Math.floor(Math.random() * 365) + 1;
-    const createdDate = new Date();
-    createdDate.setDate(createdDate.getDate() - randomAge);
+
+function createResult(whois: any): WhoisResult {
+    const currentDate = new Date();
+    const currentDateDaya = currentDate.getDate()
+
+    const created = new Date(whois.create_date);
+    const current = new Date();
+
+    const diffMs = current.getTime() - created.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+    console.log(diffDays); // 3
+
 
     return {
-        createdDate: createdDate.toISOString().split('T')[0],
-        ageInDays: randomAge,
+        createdDate: whois.create_date.split('T')[0],
+        ageInDays: diffDays,
         registrar: 'Unknown Registrar',
     };
 }
-
-function createResul
