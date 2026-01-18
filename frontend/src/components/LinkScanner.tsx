@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -13,7 +12,19 @@ import {
 import { io, Socket } from 'socket.io-client';
 import SecurityReport from './SecurityReport';
 
-const LinkScanner: React.FC = () => {
+interface ProgressUpdate {
+  step: string;
+  message: string;
+  status: 'pending' | 'success' | 'warning' | 'error';
+  data?: any;
+}
+
+interface LinkScannerProps {
+  initialUrl?: string | null;
+  onScanComplete?: () => void;
+}
+
+const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete }) => {
   const [url, setUrl] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -94,21 +105,22 @@ const LinkScanner: React.FC = () => {
     setIsFromQR(false);
     setIsScanning(true);
     setReportData(null);
+    setProgressUpdates([]);
 
-    // Simulate scanning delay
-    setTimeout(() => {
-      setIsScanning(false);
-      // Mock data for now
-      setReportData({
-        url: url,
-        score: Math.floor(Math.random() * 40) + 60, // 60-99
-        domainAge: 'Oct 12, 2018 (6 years ago)',
-        sslStatus: 'valid',
-        registrar: 'NameCheap, Inc.',
-        serverLocation: 'San Francisco, US',
-        sandboxResult: 'clean',
-      });
-    }, 2500);
+    socketRef.current.emit('start-scan', { url });
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'success':
+        return <CheckCircle size={16} color="var(--success)" />;
+      case 'warning':
+        return <AlertTriangle size={16} color="var(--warning)" />;
+      case 'error':
+        return <XCircle size={16} color="var(--danger)" />;
+      default:
+        return <Loader2 size={16} className="animate-spin" style={{ color: 'var(--primary)' }} />;
+    }
   };
 
   return (

@@ -5,12 +5,12 @@ export interface SafeBrowsingResult {
 }
 
 export async function checkSafeBrowsing(url: string): Promise<SafeBrowsingResult> {
-    // Google Safe Browsing API v4 endpoint
+    console.log('\n🔍 [SAFE BROWSING] Starting check for:', url);
+
     const apiKey = process.env.GOOGLE_SAFE_BROWSING_API_KEY;
 
     if (!apiKey) {
-        console.warn('Google Safe Browsing API key not configured');
-        // Return safe by default if API key is missing (for demo purposes)
+        console.warn('⚠️  [SAFE BROWSING] API key not configured - skipping real check');
         return {
             isSafe: true,
             threats: [],
@@ -18,7 +18,10 @@ export async function checkSafeBrowsing(url: string): Promise<SafeBrowsingResult
         };
     }
 
-    const apiUrl = `https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${apiKey}`;
+    console.log('✅ [SAFE BROWSING] API key found, making request to Google...');
+
+    const apiUrl = `https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${apiKey.substring(0, 10)}...`;
+    console.log('📡 [SAFE BROWSING] Endpoint:', apiUrl);
 
     const requestBody = {
         client: {
@@ -39,7 +42,8 @@ export async function checkSafeBrowsing(url: string): Promise<SafeBrowsingResult
     };
 
     try {
-        const response = await fetch(apiUrl, {
+        const fullApiUrl = `https://safebrowsing.googleapis.com/v4/threatMatches:find?key=${apiKey}`;
+        const response = await fetch(fullApiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -47,27 +51,29 @@ export async function checkSafeBrowsing(url: string): Promise<SafeBrowsingResult
             body: JSON.stringify(requestBody),
         });
 
-        const data = await response.json();
+        console.log('📥 [SAFE BROWSING] Response status:', response.status);
 
-        // If matches are found, the URL is unsafe
+        const data: any = await response.json();
+        console.log('📦 [SAFE BROWSING] Response data:', JSON.stringify(data, null, 2));
+
         if (data.matches && data.matches.length > 0) {
             const threats = data.matches.map((match: any) => match.threatType);
+            console.log('🚨 [SAFE BROWSING] THREATS DETECTED:', threats);
             return {
                 isSafe: false,
-                threats: [...new Set(threats)], // Remove duplicates
+                threats: [...new Set(threats)],
                 threatTypes: threats,
             };
         }
 
-        // No matches = safe
+        console.log('✅ [SAFE BROWSING] No threats found - URL is safe\n');
         return {
             isSafe: true,
             threats: [],
             threatTypes: [],
         };
     } catch (error) {
-        console.error('Safe Browsing API error:', error);
-        // On error, assume safe (fail open for demo)
+        console.error('❌ [SAFE BROWSING] API error:', error);
         return {
             isSafe: true,
             threats: [],
