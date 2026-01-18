@@ -7,8 +7,8 @@ This document tracks the security vectors and metrics used for end-to-end websit
 ---
 
 ## 1. Domain & Registration
-- [x] **Domain Age** (Mock/Simulated)
-- [x] **Registrar Info** (Mock/Simulated)
+- [x] **Domain Age** (Real-time check)
+- [x] **Registrar Info** (Real-time check)
 - [ ] **WHOIS Privacy** - Detection of hidden ownership.
 - [ ] **Domain Expiry** - Identifying short-lived scam domains.
 - [ ] **Historical Ownership** - Tracking recent domain transfers.
@@ -58,6 +58,7 @@ This document tracks the security vectors and metrics used for end-to-end websit
 ## API Keys Required
 | API | Purpose | Free Tier |
 |-----|---------|-----------|
+| Ip2Whois APi | Free | 
 | Google Safe Browsing | Threat database | ✅ Free |
 | AbuseIPDB | IP reputation | ✅ 1000/day |
 
