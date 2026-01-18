@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { Camera, CameraOff, AlertCircle, RefreshCw } from 'lucide-react';
+import { Camera, CameraOff, AlertCircle } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface QRScannerProps {
     onScanSuccess: (decodedText: string) => void;
@@ -9,12 +10,15 @@ interface QRScannerProps {
 const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
     const [scannerStarted, setScannerStarted] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [scannedUrl, setScannedUrl] = useState<string | null>(null);
     const scannerRef = useRef<Html5Qrcode | null>(null);
-    const stoppingRef = useRef(false); // Prevent double-stop
+    const stoppingRef = useRef(false);
 
     useEffect(() => {
+        // Auto-start scanner when component mounts
+        startScanner();
+
         return () => {
-            // Cleanup: only stop if not already stopping
             const scanner = scannerRef.current;
             if (scanner && !stoppingRef.current) {
                 try {
@@ -23,7 +27,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
                         scanner.stop().catch(() => { });
                     }
                 } catch (e) {
-                    // Ignore all errors during cleanup
+                    // Ignore cleanup errors
                 }
             }
         };
@@ -33,7 +37,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
         setError(null);
         stoppingRef.current = false;
 
-        const scanner = new Html5Qrcode("qr-reader-element");
+        const scanner = new Html5Qrcode("qr-reader-mobile");
         scannerRef.current = scanner;
 
         try {
@@ -41,14 +45,19 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
                 { facingMode: "environment" },
                 { fps: 10, qrbox: { width: 250, height: 250 } },
                 (decodedText) => {
-                    // Prevent multiple stop calls
                     if (stoppingRef.current) return;
                     stoppingRef.current = true;
+
+                    // Show the scanned URL briefly before transitioning
+                    setScannedUrl(decodedText);
 
                     const finalize = () => {
                         scannerRef.current = null;
                         setScannerStarted(false);
-                        onScanSuccess(decodedText);
+                        // Delay callback to show the URL
+                        setTimeout(() => {
+                            onScanSuccess(decodedText);
+                        }, 1500);
                     };
 
                     if (scanner.isScanning) {
@@ -62,7 +71,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
             setScannerStarted(true);
         } catch (err) {
             console.error(err);
-            setError("Failed to access camera. Please ensure permissions are granted.");
+            setError("Failed to access camera. Please grant camera permissions.");
         }
     };
 
@@ -83,81 +92,140 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <div className="glass-card" style={{ padding: '40px', textAlign: 'center' }}>
-                <h2 style={{ marginBottom: '16px' }}>QR Security Lens</h2>
-                <p style={{ color: 'var(--text-muted)', marginBottom: '32px' }}>
-                    Instantly intercept and analyze URLs embedded in public QR codes.
-                </p>
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: '800px',
+            padding: '40px 20px',
+            justifyContent: 'center'
+        }}>
+            {/* Logo */}
+            <motion.h1
+                className="neon-text-pink"
+                style={{
+                    fontSize: '32px',
+                    textAlign: 'center',
+                    marginBottom: '40px',
+                    textTransform: 'uppercase'
+                }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+            >
+                SAFESITE
+            </motion.h1>
 
-                <div
-                    style={{
-                        width: '100%',
-                        maxWidth: '400px',
-                        margin: '0 auto',
-                        borderRadius: '24px',
-                        overflow: 'hidden',
-                        background: 'rgba(0,0,0,0.5)',
-                        minHeight: '300px',
-                        border: scannerStarted ? '2px solid var(--primary)' : '2px dashed var(--glass-border)',
-                        position: 'relative'
-                    }}
-                >
-                    <div id="qr-reader-element" style={{ width: '100%', height: '100%' }}></div>
+            {/* Camera View */}
+            <div style={{
+                width: '100%',
+                borderRadius: '20px',
+                overflow: 'hidden',
+                background: 'rgba(0,0,0,0.6)',
+                minHeight: '400px',
+                border: scannerStarted ? '2px solid var(--primary-neon-pink)' : '2px dashed var(--glass-border)',
+                position: 'relative',
+                marginBottom: '24px'
+            }}>
+                <div id="qr-reader-mobile" style={{ width: '100%', height: '100%' }}></div>
 
-                    {!scannerStarted && (
-                        <div style={{
+                {!scannerStarted && (
+                    <div style={{
+                        position: 'absolute',
+                        top: 0, left: 0, right: 0, bottom: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        pointerEvents: 'none'
+                    }}>
+                        {error ? (
+                            <div style={{ color: 'var(--danger-red)', textAlign: 'center', padding: '20px' }}>
+                                <AlertCircle size={48} style={{ marginBottom: '16px' }} />
+                                <p style={{ fontSize: '14px' }}>{error}</p>
+                            </div>
+                        ) : (
+                            <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
+                                <Camera size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
+                                <p style={{ fontSize: '14px' }}>Camera standby</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Scanned URL Overlay */}
+                {scannedUrl && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        style={{
                             position: 'absolute',
-                            top: 0, left: 0, right: 0, bottom: 0,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            pointerEvents: 'none'
+                            bottom: '20px',
+                            left: '20px',
+                            right: '20px',
+                            background: 'linear-gradient(135deg, rgba(255, 215, 0, 0.9) 0%, rgba(255, 201, 71, 0.9) 100%)',
+                            padding: '16px',
+                            borderRadius: '12px',
+                            textAlign: 'center',
+                            boxShadow: 'var(--glow-gold)'
+                        }}
+                    >
+                        <p style={{
+                            fontSize: '14px',
+                            fontWeight: 700,
+                            color: 'var(--bg-midnight)',
+                            wordBreak: 'break-all'
                         }}>
-                            {error ? (
-                                <div style={{ color: 'var(--danger)', textAlign: 'center', padding: '20px' }}>
-                                    <AlertCircle size={48} style={{ marginBottom: '16px' }} />
-                                    <p>{error}</p>
-                                </div>
-                            ) : (
-                                <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
-                                    <Camera size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-                                    <p>Camera standby</p>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                <div style={{ marginTop: '32px', display: 'flex', gap: '16px', justifyContent: 'center' }}>
-                    {!scannerStarted ? (
-                        <button className="neon-button" onClick={startScanner} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Camera size={20} />
-                            Activate Scanner
-                        </button>
-                    ) : (
-                        <button className="neon-button" onClick={stopScanner} style={{ background: 'var(--danger)', boxShadow: '0 0 15px rgba(255, 77, 77, 0.3)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <CameraOff size={20} />
-                            Deactivate
-                        </button>
-                    )}
-                    <button className="neon-button" style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid var(--glass-border)' }}>
-                        <RefreshCw size={20} />
-                    </button>
-                </div>
+                            {scannedUrl}
+                        </p>
+                    </motion.div>
+                )}
             </div>
 
-            <div className="glass-card" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-                <div style={{ padding: '12px', borderRadius: '50%', background: 'rgba(255, 204, 0, 0.1)', color: 'var(--warning)' }}>
-                    <AlertCircle size={24} />
-                </div>
+            {/* Control Buttons */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+                {!scannerStarted ? (
+                    <button
+                        className="action-button action-button-gold"
+                        onClick={startScanner}
+                    >
+                        <Camera size={20} style={{ marginRight: '8px', display: 'inline' }} />
+                        Activate Scanner
+                    </button>
+                ) : (
+                    <button
+                        className="action-button action-button-red"
+                        onClick={stopScanner}
+                    >
+                        <CameraOff size={20} style={{ marginRight: '8px', display: 'inline' }} />
+                        Stop Scanner
+                    </button>
+                )}
+            </div>
+
+            {/* Warning Message */}
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+                style={{
+                    marginTop: '32px',
+                    padding: '16px',
+                    background: 'rgba(255, 215, 0, 0.1)',
+                    border: '1px solid rgba(255, 215, 0, 0.3)',
+                    borderRadius: '12px',
+                    display: 'flex',
+                    gap: '12px',
+                    alignItems: 'flex-start'
+                }}
+            >
+                <AlertCircle size={20} color="var(--warning-gold)" style={{ flexShrink: 0, marginTop: '2px' }} />
                 <div>
-                    <h4 style={{ marginBottom: '4px' }}>Public QR Warning</h4>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                    <h4 style={{ fontSize: '14px', marginBottom: '4px', color: 'var(--warning-gold)' }}>
+                        Public QR Warning
+                    </h4>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '12px', lineHeight: '1.5' }}>
                         Malicious QR codes can lead to "quishing" attacks. Always scan before you click.
                     </p>
                 </div>
-            </div>
+            </motion.div>
         </div>
     );
 };
