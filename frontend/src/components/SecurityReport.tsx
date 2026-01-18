@@ -1,6 +1,6 @@
 import React from 'react';
-import { motion } from 'framer-motion';
-import { CheckCircle, AlertTriangle, ShieldAlert, Globe, Lock, ShieldCheck, Server } from 'lucide-react';
+import { CheckCircle, AlertTriangle, ShieldAlert, Globe, Lock, ShieldCheck, Server, Download } from 'lucide-react';
+import { generatePDFReport } from '../utils/pdfGenerator';
 
 interface ReportData {
     url: string;
@@ -26,6 +26,10 @@ const SecurityReport: React.FC<{ data: ReportData }> = ({ data }) => {
             case 'malicious': return <ShieldAlert color="var(--danger)" />;
             default: return null;
         }
+    };
+
+    const handleDownloadPDF = () => {
+        generatePDFReport(data);
     };
 
     return (
@@ -120,7 +124,19 @@ const SecurityReport: React.FC<{ data: ReportData }> = ({ data }) => {
             </div>
 
             <div style={{ marginTop: '32px', textAlign: 'center' }}>
-                <button className="neon-button" style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid var(--glass-border)' }}>
+                <button
+                    className="neon-button"
+                    onClick={handleDownloadPDF}
+                    style={{
+                        background: 'rgba(255,255,255,0.05)',
+                        color: 'white',
+                        border: '1px solid var(--glass-border)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                    }}
+                >
+                    <Download size={18} />
                     Download PDF Report
                 </button>
             </div>

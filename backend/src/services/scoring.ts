@@ -13,6 +13,13 @@ export interface ScanResult {
             expiresOn: string;
             daysUntilExpiry: number;
         };
+        geolocation?: {
+            ip: string;
+            city: string;
+            country: string;
+            isp: string;
+            org: string;
+        };
         safeBrowsing?: {
             isSafe: boolean;
             threats: string[];

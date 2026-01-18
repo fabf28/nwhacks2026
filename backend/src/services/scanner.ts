@@ -1,5 +1,7 @@
 import { checkWhois } from './whois';
 import { checkSsl } from './ssl';
+import { checkGeolocation } from './geolocation';
+import { checkSafeBrowsing } from './safeBrowsing';
 import { calculateScore, ScanResult } from './scoring';
 
 export interface ProgressUpdate {
@@ -39,7 +41,50 @@ export async function scanUrl(
         return results;
     }
 
-    // Step 2: WHOIS Check
+    // Step 2: Google Safe Browsing Check (CRITICAL - check first)
+    onProgress({
+        step: 'safeBrowsing',
+        message: 'Checking against threat databases...',
+        status: 'pending',
+    });
+
+    try {
+        const safeBrowsingData = await checkSafeBrowsing(url);
+        results.checks.safeBrowsing = safeBrowsingData;
+
+        if (!safeBrowsingData.isSafe) {
+            onProgress({
+                step: 'safeBrowsing',
+                message: `THREAT DETECTED: ${safeBrowsingData.threats.join(', ')}`,
+                status: 'error',
+                data: safeBrowsingData,
+            });
+            // Immediately fail the scan if it's on a blacklist
+            results.score = 0;
+            onProgress({
+                step: 'complete',
+                message: 'Scan complete. URL is UNSAFE!',
+                status: 'error',
+                data: results,
+            });
+            return results;
+        } else {
+            onProgress({
+                step: 'safeBrowsing',
+                message: 'No threats detected in Google Safe Browsing',
+                status: 'success',
+                data: safeBrowsingData,
+            });
+        }
+    } catch (e) {
+        onProgress({
+            step: 'safeBrowsing',
+            message: 'Could not verify against threat databases',
+            status: 'warning',
+        });
+    }
+
+    // Step 3: WHOIS Check
     onProgress({
         step: 'whois',
         message: 'Checking domain registration...',
@@ -114,7 +159,32 @@ export async function scanUrl(
         });
     }
 
-    // Step 4: Calculate final score
+    // Step 4: Geolocation Check
+    onProgress({
+        step: 'geolocation',
+        message: 'Looking up server location...',
+        status: 'pending',
+    });
+
+    try {
+        const geoData = await checkGeolocation(hostname);
+        results.checks.geolocation = geoData;
+
+        onProgress({
+            step: 'geolocation',
+            message: `Server located in ${geoData.city}, ${geoData.country}`,
+            status: 'success',
+            data: geoData,
+        });
+    } catch (e) {
+        onProgress({
+            step: 'geolocation',
+            message: 'Could not determine server location',
+            status: 'warning',
+        });
+    }
+
+    // Step 5: Calculate final score
     const finalScore = calculateScore(results);
     results.score = finalScore;
 

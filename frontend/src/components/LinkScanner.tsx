@@ -52,7 +52,9 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
                     domainAge: result.checks?.whois?.createdDate || 'Unknown',
                     sslStatus: result.checks?.ssl?.valid ? 'valid' : 'invalid',
                     registrar: result.checks?.whois?.registrar || 'Unknown',
-                    serverLocation: 'N/A',
+                    serverLocation: result.checks?.geolocation
+                        ? `${result.checks.geolocation.city}, ${result.checks.geolocation.country}`
+                        : 'Unknown',
                     sandboxResult: 'clean',
                 });
                 setIsScanning(false);
