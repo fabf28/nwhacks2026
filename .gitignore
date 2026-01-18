@@ -1,0 +1,19 @@
+# Common ignores
+node_modules/
+.env
+.env.local
+.env.*.local
+.DS_Store
+
+# Build outputs
+/dist
+/build
+/out
+
+# Backend specific
+backend/.env
+backend/dist/
+
+# Frontend specific
+frontend/dist/
+frontend/.env.local
