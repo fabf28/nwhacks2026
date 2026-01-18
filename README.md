@@ -47,15 +47,42 @@ X protects users from malicious URLs by running **10+ security checks** in real-
 
 ## Docker Sandbox Analysis
 
-The Docker sandbox actually visits the URL in an isolated browser and monitors everything:
+The Docker sandbox visits the URL in an isolated browser and monitors all activity with **15+ threat detection categories**:
 
 1. **Spins up a Playwright container** (`mcr.microsoft.com/playwright:v1.49.0-noble`)
-2. **Visits the URL** and waits for the page to load
+2. **Visits the URL** and waits for the page to fully load
 3. **Captures all network requests** the page makes
-4. **Analyzes each request** for:
-   - Suspicious TLDs (`.tk`, `.ml`, `.ga`, etc.)
-   - Direct IP address connections
-   - Data exfiltration patterns (long query strings)
-   - Known malicious patterns
+4. **Analyzes each request** with risk scoring and categorization
+
+### Detection Categories
+
+| Category | Description |
+|----------|-------------|
+| **Suspicious TLD** | Free/abused TLDs like `.xyz`, `.tk`, `.ml`, `.icu`, `.top`, `.monster` |
+| **Phishing Keywords** | URLs containing `login`, `verify`, `secure`, `account`, `password`, etc. |
+| **Brand Impersonation** | Domains mimicking PayPal, Netflix, Amazon, Microsoft, banks, etc. |
+| **Malware Downloads** | Requests for `.exe`, `.scr`, `.bat`, `.msi`, `.jar`, `.ps1`, etc. |
+| **Cryptominer Scripts** | Known mining domains like CoinHive, JSEcoin, CryptoLoot |
+| **Tracking/Analytics** | Excessive third-party trackers (DoubleClick, Hotjar, Mixpanel) |
+| **Data Exfiltration** | Long query strings, base64 payloads, suspicious POST data |
+| **IP Direct Access** | Connections directly to IP addresses (bypassing DNS) |
+| **Injection Attempts** | SQL injection, XSS, path traversal patterns |
+| **C2 Patterns** | PHP endpoints with hash parameters (command & control) |
+| **WordPress Exploits** | Requests to `/wp-admin`, `/wp-login`, `/wp-includes` |
+| **Excessive Redirects** | Chains of redirects often used in phishing |
+| **URL Obfuscation** | Unusual encoding, homoglyphs, Unicode tricks |
+
+### Risk Scoring
+
+Each suspicious request is assigned a risk level:
+
+| Level | Score | Example |
+|-------|-------|---------|
+| **Critical** | 40 | Malware download, cryptominer, brand impersonation |
+| **High** | 25 | Phishing keywords, suspicious TLD + keywords |
+| **Medium** | 15 | Direct IP access, tracking overload |
+| **Low** | 5 | Single suspicious indicator |
+
+The overall risk (`safe` → `low` → `medium` → `high` → `critical`) is calculated from the total risk score of all requests.
 
 **Requirements:** Docker Desktop must be running on the host machine.
