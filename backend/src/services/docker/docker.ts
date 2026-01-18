@@ -4,8 +4,8 @@ import {
   generatePlaywrightScript,
   wrapScriptForContainer,
 } from './playwrightScript';
-import { analyzeRequest } from './analyzer';
-import type { NetworkRequest, DockerScanResult } from './types';
+import { analyzeAllRequests } from './analyzer';
+import type { NetworkRequest, DockerScanResult, SuspiciousRequest } from './types';
 
 /**
  * Parses Docker container logs, stripping the 8-byte frame headers.
@@ -135,21 +135,52 @@ export async function runDockerScan(url: string): Promise<DockerScanResult> {
     const result = extractResultJson(output);
 
     if (result) {
-      const requests: NetworkRequest[] = (result.networkRequests || []).map(
-        (req: any) => {
-          const analysis = analyzeRequest(req.url, originalDomain);
-          return {
-            ...req,
-            isSuspicious: analysis.isSuspicious,
-            reason: analysis.reason,
-          };
-        },
+      // Parse raw requests from container
+      const rawRequests: NetworkRequest[] = (result.networkRequests || []).map(
+        (req: any) => ({
+          url: req.url,
+          domain: req.domain,
+          resourceType: req.resourceType,
+          status: req.status,
+          isSuspicious: false,
+          reason: undefined,
+        }),
       );
 
-      const suspiciousRequests = requests.filter((r) => r.isSuspicious);
+      // Run enhanced analysis on all requests
+      const { analyzedRequests, suspiciousRequests, summary } = analyzeAllRequests(
+        rawRequests,
+        originalDomain,
+      );
+
+      // Map analyzed requests back to NetworkRequest format
+      const networkRequests: NetworkRequest[] = analyzedRequests.map((r) => ({
+        url: r.url,
+        domain: r.domain,
+        resourceType: r.resourceType,
+        status: r.status,
+        isSuspicious: r.analysis.isSuspicious,
+        reason: r.analysis.reasons.join('; '),
+      }));
+
+      // Map suspicious requests to SuspiciousRequest format
+      const suspiciousResult: SuspiciousRequest[] = suspiciousRequests.map((r) => ({
+        url: r.url,
+        domain: r.domain,
+        resourceType: r.resourceType,
+        status: r.status,
+        isSuspicious: true,
+        reason: r.analysis.reasons.join('; '),
+        riskLevel: r.analysis.riskLevel,
+        categories: r.analysis.categories,
+        reasons: r.analysis.reasons,
+        riskScore: r.analysis.riskScore,
+      }));
+
+      // Extract unique third-party domains
       const thirdPartyDomains = [
         ...new Set(
-          requests.map((r) => r.domain).filter((d) => d !== originalDomain),
+          rawRequests.map((r) => r.domain).filter((d) => d !== originalDomain),
         ),
       ];
 
@@ -158,10 +189,11 @@ export async function runDockerScan(url: string): Promise<DockerScanResult> {
         containerId,
         pageTitle: result.pageTitle,
         finalUrl: result.finalUrl,
-        networkRequests: requests,
-        suspiciousRequests,
-        totalRequests: requests.length,
+        networkRequests,
+        suspiciousRequests: suspiciousResult,
+        totalRequests: networkRequests.length,
         thirdPartyDomains,
+        analysisSummary: summary,
         error: result.error,
       };
     }
