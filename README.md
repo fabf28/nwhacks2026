@@ -1,2 +1,61 @@
-# nwhacks2026
-Application that scans a qr code and check for vulnerabilities before the user can proceed to opening the website.
+# NwHacks 2026
+
+A comprehensive URL security scanner that analyzes QR codes and links for potential threats before users visit them. Built for nwHacks 2026.
+
+## What It Does
+
+X protects users from malicious URLs by running **10+ security checks** in real-time, including a sandboxed browser analysis that captures all network requests a website makes.
+
+### Key Features
+
+- **QR Code Scanning** — Scan QR codes with your camera to analyze the embedded URL
+- **Link Analysis** — Paste any URL to get a full security report
+- **Real-time Progress** — Watch each security check complete via WebSocket updates
+- **Safety Score** — Get a 0-100 score based on combined threat indicators
+- **PDF Reports** — Download detailed security reports
+
+---
+
+## Architecture
+![architecture](./public/nwhacks2026_architecture_diagram.png)
+
+---
+
+## 🔍 Security Checks
+
+| # | Check | Description | Scoring Impact |
+|---|-------|-------------|----------------|
+| 1 | **Google Safe Browsing** | Checks against Google's malware/phishing database | Instant fail if threat found |
+| 2 | **WHOIS Lookup** | Domain age and registrar info | -40 if domain < 7 days old |
+| 3 | **SSL/TLS Certificate** | Validates cert, checks TLS version and cipher strength | -30 if invalid |
+| 4 | **Geolocation** | Server location and ISP info | Informational |
+| 5 | **Reverse DNS** | Verifies PTR records match hostname | -5 if no match |
+| 6 | **Port Scan** | Scans for suspicious open ports (SSH, RDP, MySQL, etc.) | -15 if suspicious ports open |
+| 7 | **IP Reputation** | Checks AbuseIPDB for abuse reports | -40 if high abuse score |
+| 8 | **Security Headers** | Checks HTTP headers (CSP, HSTS, X-Frame-Options, etc.) | Up to -25 for poor grade |
+| 9 | **Cookie Security** | Analyzes cookie flags (Secure, HttpOnly, SameSite) | -10 for insecure cookies |
+| 10 | **Docker Sandbox** | Runs URL in isolated Playwright container, captures all network requests | -30 if >5 suspicious requests |
+
+### Deep Scan (Optional)
+| # | Check | Description |
+|---|-------|-------------|
+| 11 | **Sensitive Files** | Probes for exposed files (.env, .git, backups, etc.) |
+| 12 | **Version Disclosure** | Checks for server version headers |
+| 13 | **Admin Panels** | Scans for exposed admin interfaces |
+
+---
+
+## Docker Sandbox Analysis
+
+The Docker sandbox actually visits the URL in an isolated browser and monitors everything:
+
+1. **Spins up a Playwright container** (`mcr.microsoft.com/playwright:v1.49.0-noble`)
+2. **Visits the URL** and waits for the page to load
+3. **Captures all network requests** the page makes
+4. **Analyzes each request** for:
+   - Suspicious TLDs (`.tk`, `.ml`, `.ga`, etc.)
+   - Direct IP address connections
+   - Data exfiltration patterns (long query strings)
+   - Known malicious patterns
+
+**Requirements:** Docker Desktop must be running on the host machine.
