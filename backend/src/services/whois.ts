@@ -36,6 +36,6 @@ function createResult(whois: any): WhoisResult {
     return {
         createdDate: whois.create_date.split('T')[0],
         ageInDays: diffDays,
-        registrar: 'Unknown Registrar',
+        registrar: whois.registrar.name,
     };
 }
