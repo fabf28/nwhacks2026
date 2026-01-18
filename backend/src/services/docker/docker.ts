@@ -92,18 +92,30 @@ export async function runDockerScan(url: string): Promise<DockerScanResult> {
   const script = generatePlaywrightScript(url);
   const wrappedScript = wrapScriptForContainer(script);
 
+  console.log('\n🐳 [DOCKER] Starting sandbox scan...');
+  console.log(`📍 [DOCKER] Socket path: ${DOCKER_SOCKET_PATH}`);
+  console.log(`🖼️  [DOCKER] Image: ${PLAYWRIGHT_IMAGE}`);
+
   try {
     // Pull playwright image if not present
+    console.log('⏬ [DOCKER] Pulling Playwright image (if needed)...');
     await new Promise<void>((resolve, reject) => {
       docker.pull(PLAYWRIGHT_IMAGE, (err: any, stream: any) => {
-        if (err) return reject(err);
+        if (err) {
+          console.error('❌ [DOCKER] Pull failed:', err.message);
+          return reject(err);
+        }
         docker.modem.followProgress(stream, (err: any) => {
           if (err) reject(err);
-          else resolve();
+          else {
+            console.log('✅ [DOCKER] Image ready');
+            resolve();
+          }
         });
       });
     });
 
+    console.log('📦 [DOCKER] Creating container...');
     const container = await docker.createContainer({
       Image: PLAYWRIGHT_IMAGE,
       Cmd: ['bash', '-c', wrappedScript],
@@ -113,10 +125,13 @@ export async function runDockerScan(url: string): Promise<DockerScanResult> {
       },
     });
 
+    console.log('🚀 [DOCKER] Starting container...');
     await container.start();
     const containerId = container.id.substring(0, 12);
+    console.log(`📋 [DOCKER] Container ID: ${containerId}`);
 
     // Wait for container to finish
+    console.log('⏳ [DOCKER] Waiting for container to finish...');
     await container.wait();
 
     // Get logs

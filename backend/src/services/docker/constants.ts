@@ -1,5 +1,19 @@
+import { homedir } from 'os';
+
 // Docker configuration
-export const DOCKER_SOCKET_PATH = '//./pipe/docker_engine';
+// macOS Docker Desktop (newer) uses ~/.docker/run/docker.sock
+// Linux/older macOS uses /var/run/docker.sock
+// Windows uses named pipe
+function getDockerSocketPath(): string {
+  if (process.platform === 'win32') {
+    return '//./pipe/docker_engine';
+  }
+  // Docker Desktop for macOS location
+  const homeSocket = `${homedir()}/.docker/run/docker.sock`;
+  return homeSocket;
+}
+
+export const DOCKER_SOCKET_PATH = getDockerSocketPath();
 export const PLAYWRIGHT_IMAGE = 'mcr.microsoft.com/playwright:v1.49.0-noble';
 export const PLAYWRIGHT_VERSION = '1.49.0';
 
