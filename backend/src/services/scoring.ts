@@ -9,6 +9,7 @@ import { SafeBrowsingResult } from './safeBrowsing';
 import { SensitiveFileResult } from './sensitiveFiles';
 import { VersionDisclosureResult } from './versionDisclosure';
 import { AdminPanelResult } from './adminPanels';
+import { DockerScanResult } from './docker/types';
 
 export interface ScanResult {
   url: string;
@@ -19,77 +20,13 @@ export interface ScanResult {
       ageInDays: number;
       registrar: string;
     };
-    ssl?: {
-      valid: boolean;
-      issuer: string;
-      expiresOn: string;
-      daysUntilExpiry: number;
-    };
-    geolocation?: {
-      ip: string;
-      city: string;
-      country: string;
-      isp: string;
-      org: string;
-    };
-    safeBrowsing?: {
-      isSafe: boolean;
-      threats: string[];
-    };
-    reverseDns?: {
-      hostname: string;
-      ip: string;
-      matches: boolean;
-      hostnames: string[];
-    };
-    portScan?: {
-      ip: string;
-      openPorts: number[];
-      suspiciousPorts: number[];
-      isSuspicious: boolean;
-    };
-    ipReputation?: {
-      ip: string;
-      abuseConfidenceScore: number;
-      isWhitelisted: boolean;
-      countryCode: string;
-      isp: string;
-      domain: string;
-      totalReports: number;
-      lastReportedAt: string | null;
-      isSuspicious: boolean;
-    };
-    dockerScan?: {
-      success: boolean;
-      containerId?: string;
-      pageTitle?: string;
-      finalUrl?: string;
-      networkRequests: Array<{
-        url: string;
-        domain: string;
-        resourceType: string;
-        status?: number;
-        isSuspicious: boolean;
-        reason?: string;
-      }>;
-      suspiciousRequests: Array<{
-        url: string;
-        domain: string;
-        resourceType: string;
-        status?: number;
-        isSuspicious: boolean;
-        reason?: string;
-      }>;
-      totalRequests: number;
-      thirdPartyDomains: string[];
-      error?: string;
-    };
     ssl?: SslResult;
     geolocation?: GeolocationResult;
     safeBrowsing?: SafeBrowsingResult;
     reverseDns?: ReverseDnsResult;
     portScan?: PortScanResult;
     ipReputation?: IpReputationResult;
+    dockerScan?: DockerScanResult;
     securityHeaders?: SecurityHeadersResult;
     cookieSecurity?: CookieSecurityResult;
     // Vulnerability checks

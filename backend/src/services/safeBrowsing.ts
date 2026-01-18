@@ -57,11 +57,11 @@ export async function checkSafeBrowsing(url: string): Promise<SafeBrowsingResult
         console.log('📦 [SAFE BROWSING] Response data:', JSON.stringify(data, null, 2));
 
         if (data.matches && data.matches.length > 0) {
-            const threats = data.matches.map((match: any) => match.threatType);
+            const threats: string[] = data.matches.map((match: any) => match.threatType);
             console.log('🚨 [SAFE BROWSING] THREATS DETECTED:', threats);
             return {
                 isSafe: false,
-                threats: [...new Set(threats)],
+                threats: [...new Set(threats)] as string[],
                 threatTypes: threats,
             };
         }
