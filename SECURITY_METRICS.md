@@ -14,8 +14,8 @@ This document tracks the security vectors and metrics used for end-to-end websit
 - [x] **Issuer Verification** (Real-time check)
 - [x] **Expiry Date** (Real-time check)
 - [ ] **Certificate Chain** - Proper signing verification.
-- [ ] **TLS Version** - Support for secure protocols (TLS 1.2/1.3).
-- [ ] **Cipher Strength** - Detection of weak cryptographic cipsher suites.
+- [x] **TLS Version** - Support for secure protocols (TLS 1.2/1.3) (real)
+- [x] **Cipher Strength** - Detection of weak cryptographic cipher suites (real)
 
 ## 3. Network & Infrastructure
 - [x] **Server Geolocation** (Real via IP-API)
@@ -38,6 +38,6 @@ This document tracks the security vectors and metrics used for end-to-end websit
 - [ ] **Typosquatting** - Fuzzy-matching domain against popular brands.
 
 ## 6. HTTP & Web Security
-- [ ] **Security Headers** - Presence of CSP, HSTS, X-Frame-Options.
-- [ ] **Cookie Safety** - Secure/HttpOnly flags.
+- [x] **Security Headers** - Presence of CSP, HSTS, X-Frame-Options (real, graded)
+- [x] **Cookie Safety** - Secure/HttpOnly flags (real)
 - [ ] **Visual Mimicry** - Favicon/Logo impersonation detection.

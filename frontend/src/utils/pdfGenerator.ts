@@ -4,106 +4,193 @@ interface ReportData {
     url: string;
     score: number;
     domainAge: string;
-    sslStatus: 'valid' | 'expired' | 'none';
+    sslStatus: 'valid' | 'expired' | 'none' | 'invalid';
     registrar: string;
     serverLocation: string;
     sandboxResult: 'clean' | 'suspicious' | 'malicious';
+    isp?: string;
+    // SSL/TLS data
+    ssl?: {
+        tlsVersion: string;
+        cipher: string;
+        cipherStrength: 'strong' | 'moderate' | 'weak';
+        certificateChain?: { subject: string; issuer: string }[];
+    };
+    // Network data
+    reverseDns?: {
+        matches: boolean;
+        hostnames: string[];
+    };
+    portScan?: {
+        openPorts: number[];
+        suspiciousPorts: number[];
+        isSuspicious: boolean;
+    };
+    ipReputation?: {
+        abuseConfidenceScore: number;
+        totalReports: number;
+        isSuspicious: boolean;
+    };
+    safeBrowsing?: {
+        isSafe: boolean;
+        threats: string[];
+    };
+    // HTTP Security
+    securityHeaders?: {
+        score: number;
+        grade: 'A' | 'B' | 'C' | 'D' | 'F';
+        headers: { name: string; status: string }[];
+    };
+    cookieSecurity?: {
+        totalCookies: number;
+        secureCookies: number;
+        hasIssues: boolean;
+    };
 }
 
 export function generatePDFReport(data: ReportData): void {
     const doc = new jsPDF();
+    let yPos = 20;
+
+    const addSection = (title: string) => {
+        if (yPos > 250) {
+            doc.addPage();
+            yPos = 20;
+        }
+        doc.setFontSize(14);
+        doc.setTextColor(0, 242, 254);
+        doc.text(title, 20, yPos);
+        yPos += 10;
+    };
+
+    const addRow = (label: string, value: string, color?: number[]) => {
+        doc.setFontSize(10);
+        doc.setTextColor(80, 80, 80);
+        doc.text(label, 20, yPos);
+        if (color) {
+            doc.setTextColor(color[0], color[1], color[2]);
+        } else {
+            doc.setTextColor(0, 0, 0);
+        }
+        doc.text(value, 80, yPos);
+        yPos += 7;
+    };
+
+    // Colors
+    const green = [34, 197, 94];
+    const yellow = [251, 191, 36];
+    const red = [239, 68, 68];
 
     // Header
     doc.setFontSize(24);
-    doc.setTextColor(0, 242, 254); // Primary color
-    doc.text('VaultScan', 20, 20);
+    doc.setTextColor(0, 242, 254);
+    doc.text('VaultScan', 20, yPos);
+    yPos += 10;
 
     doc.setFontSize(16);
     doc.setTextColor(100, 100, 100);
-    doc.text('Security Intelligence Report', 20, 30);
+    doc.text('Security Intelligence Report', 20, yPos);
+    yPos += 8;
 
-    // Horizontal line
     doc.setDrawColor(200, 200, 200);
-    doc.line(20, 35, 190, 35);
+    doc.line(20, yPos, 190, yPos);
+    yPos += 10;
 
     // URL
     doc.setFontSize(10);
     doc.setTextColor(80, 80, 80);
-    doc.text('Analyzed URL:', 20, 45);
+    doc.text('Analyzed URL:', 20, yPos);
+    yPos += 5;
     doc.setTextColor(0, 0, 0);
-    doc.text(data.url, 20, 50);
+    doc.text(data.url.substring(0, 80), 20, yPos);
+    yPos += 15;
 
     // Safety Score
-    doc.setFontSize(14);
-    doc.setTextColor(80, 80, 80);
-    doc.text('Safety Score:', 20, 65);
-
-    const scoreColor = data.score >= 80 ? [34, 197, 94] : data.score >= 50 ? [251, 191, 36] : [239, 68, 68];
+    const scoreColor = data.score >= 80 ? green : data.score >= 50 ? yellow : red;
     doc.setFontSize(36);
     doc.setTextColor(scoreColor[0], scoreColor[1], scoreColor[2]);
-    doc.text(`${data.score}/100`, 20, 80);
+    doc.text(`${data.score}/100`, 20, yPos);
+    yPos += 8;
 
     const scoreLabel = data.score >= 80 ? 'SECURE' : data.score >= 50 ? 'WARNING' : 'DANGER';
     doc.setFontSize(12);
-    doc.text(scoreLabel, 20, 88);
+    doc.text(scoreLabel, 20, yPos);
+    yPos += 15;
 
-    // Domain Information
-    doc.setFontSize(14);
-    doc.setTextColor(0, 242, 254);
-    doc.text('Domain Information', 20, 105);
+    // 1. Domain Information
+    addSection('Domain Information');
+    addRow('Creation Date:', data.domainAge);
+    addRow('Registrar:', data.registrar);
+    yPos += 5;
 
-    doc.setFontSize(10);
-    doc.setTextColor(80, 80, 80);
-    doc.text('Creation Date:', 20, 115);
-    doc.setTextColor(0, 0, 0);
-    doc.text(data.domainAge, 70, 115);
+    // 2. SSL Certificate
+    addSection('SSL/TLS Certificate');
+    const sslColor = data.sslStatus === 'valid' ? green : red;
+    addRow('Status:', data.sslStatus.toUpperCase(), sslColor);
+    if (data.ssl) {
+        addRow('TLS Version:', data.ssl.tlsVersion);
+        addRow('Cipher:', data.ssl.cipher);
+        const cipherColor = data.ssl.cipherStrength === 'strong' ? green :
+            data.ssl.cipherStrength === 'moderate' ? yellow : red;
+        addRow('Cipher Strength:', data.ssl.cipherStrength.toUpperCase(), cipherColor);
+        if (data.ssl.certificateChain && data.ssl.certificateChain.length > 0) {
+            addRow('Chain Depth:', `${data.ssl.certificateChain.length} certificates`);
+        }
+    }
+    yPos += 5;
 
-    doc.setTextColor(80, 80, 80);
-    doc.text('Registrar:', 20, 122);
-    doc.setTextColor(0, 0, 0);
-    doc.text(data.registrar, 70, 122);
+    // 3. Infrastructure
+    addSection('Infrastructure');
+    addRow('Server Location:', data.serverLocation);
+    addRow('Hosting Provider:', data.isp || 'Unknown');
+    if (data.reverseDns) {
+        const dnsColor = data.reverseDns.matches ? green : yellow;
+        addRow('Reverse DNS:', data.reverseDns.matches ? 'VERIFIED' : 'NO MATCH', dnsColor);
+    }
+    if (data.portScan) {
+        const portColor = data.portScan.isSuspicious ? yellow : green;
+        addRow('Port Scan:', data.portScan.isSuspicious ?
+            `SUSPICIOUS (${data.portScan.suspiciousPorts.join(', ')})` :
+            `CLEAN (${data.portScan.openPorts.length} open)`, portColor);
+    }
+    yPos += 5;
 
-    // SSL Certificate
-    doc.setFontSize(14);
-    doc.setTextColor(0, 242, 254);
-    doc.text('SSL Certificate', 20, 140);
+    // 4. Threat Intelligence
+    addSection('Threat Intelligence');
+    if (data.safeBrowsing) {
+        const sbColor = data.safeBrowsing.isSafe ? green : red;
+        addRow('Google Safe Browsing:', data.safeBrowsing.isSafe ? 'CLEAN' :
+            `THREAT: ${data.safeBrowsing.threats.join(', ')}`, sbColor);
+    }
+    if (data.ipReputation) {
+        const repColor = data.ipReputation.isSuspicious ? red : green;
+        addRow('IP Reputation:', `${data.ipReputation.abuseConfidenceScore}% abuse score`, repColor);
+        addRow('Abuse Reports:', `${data.ipReputation.totalReports} reports`);
+    }
+    yPos += 5;
 
-    doc.setFontSize(10);
-    doc.setTextColor(80, 80, 80);
-    doc.text('Status:', 20, 150);
-    const sslColor = data.sslStatus === 'valid' ? [34, 197, 94] : [239, 68, 68];
-    doc.setTextColor(sslColor[0], sslColor[1], sslColor[2]);
-    doc.text(data.sslStatus.toUpperCase(), 70, 150);
+    // 5. HTTP Security
+    addSection('HTTP Security');
+    if (data.securityHeaders) {
+        const gradeColor = ['A', 'B'].includes(data.securityHeaders.grade) ? green :
+            data.securityHeaders.grade === 'C' ? yellow : red;
+        addRow('Security Headers:', `Grade ${data.securityHeaders.grade} (${data.securityHeaders.score}/100)`, gradeColor);
+    }
+    if (data.cookieSecurity) {
+        if (data.cookieSecurity.totalCookies === 0) {
+            addRow('Cookie Security:', 'No cookies set', green);
+        } else {
+            const cookieColor = data.cookieSecurity.hasIssues ? yellow : green;
+            addRow('Cookie Security:', `${data.cookieSecurity.secureCookies}/${data.cookieSecurity.totalCookies} secure`, cookieColor);
+        }
+    }
+    yPos += 5;
 
-    doc.setTextColor(80, 80, 80);
-    doc.text('Encryption:', 20, 157);
-    doc.setTextColor(0, 0, 0);
-    doc.text('TLS 1.3 / AES-256', 70, 157);
-
-    // Infrastructure
-    doc.setFontSize(14);
-    doc.setTextColor(0, 242, 254);
-    doc.text('Infrastructure', 20, 175);
-
-    doc.setFontSize(10);
-    doc.setTextColor(80, 80, 80);
-    doc.text('Server Location:', 20, 185);
-    doc.setTextColor(0, 0, 0);
-    doc.text(data.serverLocation, 70, 185);
-
-    // Virtual Sandbox
-    doc.setFontSize(14);
-    doc.setTextColor(0, 242, 254);
-    doc.text('Virtual Sandbox', 20, 203);
-
-    doc.setFontSize(10);
-    doc.setTextColor(80, 80, 80);
-    doc.text('Safety Check:', 20, 213);
-
-    const sandboxColor = data.sandboxResult === 'clean' ? [34, 197, 94] :
-        data.sandboxResult === 'suspicious' ? [251, 191, 36] : [239, 68, 68];
-    doc.setTextColor(sandboxColor[0], sandboxColor[1], sandboxColor[2]);
-    doc.text(data.sandboxResult.toUpperCase(), 70, 213);
+    // 6. Sandbox Result
+    addSection('Virtual Sandbox');
+    const sandboxColor = data.sandboxResult === 'clean' ? green :
+        data.sandboxResult === 'suspicious' ? yellow : red;
+    addRow('Safety Check:', data.sandboxResult.toUpperCase(), sandboxColor);
 
     // Footer
     doc.setFontSize(8);
@@ -112,7 +199,7 @@ export function generatePDFReport(data: ReportData): void {
     doc.text(`Generated on ${timestamp}`, 20, 280);
     doc.text('VaultScan - Advanced Domain & QR Security Intelligence', 20, 285);
 
-    // Save the PDF
+    // Save
     const filename = `VaultScan_Report_${new Date().getTime()}.pdf`;
     doc.save(filename);
 }

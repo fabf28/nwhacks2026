@@ -75,12 +75,22 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
             : 'Unknown',
           isp: result.checks?.geolocation?.isp || 'Unknown',
           sandboxResult: 'clean',
+          // SSL/TLS details
+          ssl: result.checks?.ssl ? {
+            tlsVersion: result.checks.ssl.tlsVersion,
+            cipher: result.checks.ssl.cipher,
+            cipherStrength: result.checks.ssl.cipherStrength,
+            certificateChain: result.checks.ssl.certificateChain,
+          } : undefined,
           // Network infrastructure data
           reverseDns: result.checks?.reverseDns,
           portScan: result.checks?.portScan,
           ipReputation: result.checks?.ipReputation,
           // Threat intelligence
           safeBrowsing: result.checks?.safeBrowsing,
+          // HTTP Security
+          securityHeaders: result.checks?.securityHeaders,
+          cookieSecurity: result.checks?.cookieSecurity,
         });
         setIsScanning(false);
         onScanComplete?.();
@@ -121,8 +131,20 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
     }
   }, [initialUrl, isConnected]);
 
+  // Normalize URL by adding https:// if no protocol specified
+  const normalizeUrl = (inputUrl: string): string => {
+    let normalized = inputUrl.trim();
+    if (!normalized.match(/^https?:\/\//i)) {
+      normalized = 'https://' + normalized;
+    }
+    return normalized;
+  };
+
   const handleScan = () => {
     if (!url || !socketRef.current) return;
+
+    const normalizedUrl = normalizeUrl(url);
+    setUrl(normalizedUrl); // Update the input field with normalized URL
 
     hasAutoScanned.current = false;
     setIsFromQR(false);
@@ -130,7 +152,7 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
     setReportData(null);
     setProgressUpdates([]);
 
-    socketRef.current.emit('start-scan', { url });
+    socketRef.current.emit('start-scan', { url: normalizedUrl });
   };
 
   const getStatusIcon = (status: string) => {

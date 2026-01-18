@@ -5,6 +5,8 @@ import { checkSafeBrowsing } from './safeBrowsing';
 import { checkReverseDns } from './reverseDns';
 import { checkPorts } from './portScan';
 import { checkIpReputation } from './ipReputation';
+import { checkSecurityHeaders } from './securityHeaders';
+import { checkCookieSecurity } from './cookieSecurity';
 import { calculateScore, ScanResult } from './scoring';
 
 export interface ProgressUpdate {
@@ -276,6 +278,88 @@ export async function scanUrl(
         status: 'warning',
       });
     }
+  }
+
+  // Step 9: Security Headers Check
+  onProgress({
+    step: 'securityHeaders',
+    message: 'Checking HTTP security headers...',
+    status: 'pending',
+  });
+
+  try {
+    const headersData = await checkSecurityHeaders(url);
+    results.checks.securityHeaders = headersData;
+
+    if (headersData.grade === 'F' || headersData.grade === 'D') {
+      onProgress({
+        step: 'securityHeaders',
+        message: `Security headers: Grade ${headersData.grade} (${headersData.score}/100)`,
+        status: 'error',
+        data: headersData,
+      });
+    } else if (headersData.grade === 'C') {
+      onProgress({
+        step: 'securityHeaders',
+        message: `Security headers: Grade ${headersData.grade} (${headersData.score}/100)`,
+        status: 'warning',
+        data: headersData,
+      });
+    } else {
+      onProgress({
+        step: 'securityHeaders',
+        message: `Security headers: Grade ${headersData.grade} (${headersData.score}/100)`,
+        status: 'success',
+        data: headersData,
+      });
+    }
+  } catch (e) {
+    onProgress({
+      step: 'securityHeaders',
+      message: 'Could not check security headers',
+      status: 'warning',
+    });
+  }
+
+  // Step 10: Cookie Security Check
+  onProgress({
+    step: 'cookieSecurity',
+    message: 'Analyzing cookie security...',
+    status: 'pending',
+  });
+
+  try {
+    const cookieData = await checkCookieSecurity(url);
+    results.checks.cookieSecurity = cookieData;
+
+    if (cookieData.totalCookies === 0) {
+      onProgress({
+        step: 'cookieSecurity',
+        message: 'No cookies set by server',
+        status: 'success',
+        data: cookieData,
+      });
+    } else if (cookieData.hasIssues) {
+      onProgress({
+        step: 'cookieSecurity',
+        message: `${cookieData.secureCookies}/${cookieData.totalCookies} cookies are secure`,
+        status: 'warning',
+        data: cookieData,
+      });
+    } else {
+      onProgress({
+        step: 'cookieSecurity',
+        message: `All ${cookieData.totalCookies} cookies are secure`,
+        status: 'success',
+        data: cookieData,
+      });
+    }
+  } catch (e) {
+    onProgress({
+      step: 'cookieSecurity',
+      message: 'Could not analyze cookies',
+      status: 'warning',
+    });
   }
 
   // Final Step: Calculate final score
