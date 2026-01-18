@@ -45,7 +45,17 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
     });
 
     socket.on('disconnect', () => {
+      console.log('Disconnected from backend');
       setIsConnected(false);
+      // Reset scanning state if disconnected during a scan
+      if (isScanning) {
+        setIsScanning(false);
+        setProgressUpdates((prev) => [...prev, {
+          step: 'error',
+          message: 'Connection lost during scan',
+          status: 'error'
+        }]);
+      }
     });
 
     socket.on('scan-progress', (update: ProgressUpdate) => {
@@ -65,10 +75,12 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
             : 'Unknown',
           isp: result.checks?.geolocation?.isp || 'Unknown',
           sandboxResult: 'clean',
-          // New network infrastructure data
+          // Network infrastructure data
           reverseDns: result.checks?.reverseDns,
           portScan: result.checks?.portScan,
           ipReputation: result.checks?.ipReputation,
+          // Threat intelligence
+          safeBrowsing: result.checks?.safeBrowsing,
         });
         setIsScanning(false);
         onScanComplete?.();
@@ -78,6 +90,12 @@ const LinkScanner: React.FC<LinkScannerProps> = ({ initialUrl, onScanComplete })
     socket.on('scan-error', (error) => {
       console.error('Scan error:', error);
       setIsScanning(false);
+      setProgressUpdates((prev) => [...prev, {
+        step: 'error',
+        message: error?.message || 'An error occurred during the scan',
+        status: 'error'
+      }]);
+      setReportData(null); // Clear stale data on error
     });
 
     return () => {

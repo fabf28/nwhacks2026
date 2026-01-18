@@ -37,6 +37,10 @@ interface ReportData {
         totalReports: number;
         isSuspicious: boolean;
     };
+    safeBrowsing?: {
+        isSafe: boolean;
+        threats: string[];
+    };
     isp?: string;
 }
 
@@ -263,12 +267,33 @@ const SecurityReport: React.FC<{ data: ReportData }> = ({ data }) => {
                         <ShieldCheck size={20} color="var(--primary)" />
                         <h3 style={{ fontSize: '1rem' }}>Google Safe Browsing</h3>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Threat Check</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {getStatusIcon('success')}
-                            <span style={{ fontWeight: 600, color: 'var(--success)' }}>CLEAN</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Threat Check</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {data.safeBrowsing ? (
+                                    <>
+                                        {getStatusIcon(data.safeBrowsing.isSafe ? 'success' : 'danger')}
+                                        <span style={{
+                                            fontWeight: 600,
+                                            color: data.safeBrowsing.isSafe ? 'var(--success)' : 'var(--danger)'
+                                        }}>
+                                            {data.safeBrowsing.isSafe ? 'CLEAN' : 'THREAT DETECTED'}
+                                        </span>
+                                    </>
+                                ) : (
+                                    <span style={{ color: 'var(--text-muted)' }}>N/A</span>
+                                )}
+                            </div>
                         </div>
+                        {data.safeBrowsing && !data.safeBrowsing.isSafe && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: 'var(--text-muted)' }}>Threats</span>
+                                <span style={{ color: 'var(--danger)', fontWeight: 600 }}>
+                                    {data.safeBrowsing.threats.join(', ')}
+                                </span>
+                            </div>
+                        )}
                     </div>
                 </div>
 

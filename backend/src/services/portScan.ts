@@ -1,5 +1,16 @@
 import net from 'net';
 
+/**
+ * Port Scanning Service
+ * 
+ * SECURITY NOTE: This service only scans IPs that are resolved from URLs
+ * explicitly submitted by users through the VaultScan interface. It is not
+ * designed for arbitrary scanning. For production use, consider:
+ * - Rate limiting scan requests per user/session
+ * - Logging all scan targets for audit purposes
+ * - Adding IP allowlists/blocklists
+ */
+
 export interface PortScanResult {
     ip: string;
     openPorts: number[];
