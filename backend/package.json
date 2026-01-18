@@ -16,10 +16,15 @@
   "dependencies": {
     "@fastify/cors": "^11.2.0",
     "@types/node": "^25.0.9",
+    "dockerode": "^4.0.9",
     "fastify": "^5.7.1",
+    "playwright": "^1.57.0",
     "socket.io": "^4.8.3",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^4.0.0"
   }
 }

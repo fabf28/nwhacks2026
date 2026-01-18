@@ -1,7 +1,7 @@
 import { checkWhois } from './whois';
 import { checkSsl } from './ssl';
 import { calculateScore, ScanResult } from './scoring';
-import { runDockerScan } from './docker';
+import { runDockerScan } from './docker/docker';
 
 export interface ProgressUpdate {
   step: string;
@@ -118,25 +118,44 @@ export async function scanUrl(
   // Step 4: Docker Browser Scan
   onProgress({
     step: 'browser',
-    message: 'Spawning Docker container...',
+    message: 'Analyzing page in sandboxed browser...',
     status: 'pending',
   });
 
   try {
     const browserData = await runDockerScan(url);
-    results.checks.browserScan = browserData;
+    results.checks.browserScan = {
+      success: browserData.success,
+      containerId: browserData.containerId,
+      pageTitle: browserData.pageTitle,
+      finalUrl: browserData.finalUrl,
+      totalRequests: browserData.totalRequests,
+      suspiciousRequests: browserData.suspiciousRequests.map((r) => ({
+        url: r.url,
+        reason: r.reason,
+      })),
+      thirdPartyDomains: browserData.thirdPartyDomains,
+      error: browserData.error,
+    };
 
     if (browserData.error) {
       onProgress({
         step: 'browser',
-        message: `Docker scan failed: ${browserData.error}`,
+        message: `Browser scan failed: ${browserData.error}`,
+        status: 'warning',
+        data: browserData,
+      });
+    } else if (browserData.suspiciousRequests.length > 0) {
+      onProgress({
+        step: 'browser',
+        message: `⚠️ Found ${browserData.suspiciousRequests.length} suspicious network requests out of ${browserData.totalRequests} total`,
         status: 'warning',
         data: browserData,
       });
     } else {
       onProgress({
         step: 'browser',
-        message: `Container ${browserData.containerId} running at ${browserData.ipAddress}`,
+        message: `Page loaded: "${browserData.pageTitle || 'No title'}" - ${browserData.totalRequests} network requests analyzed`,
         status: 'success',
         data: browserData,
       });
