@@ -16,11 +16,8 @@
   "dependencies": {
     "@fastify/cors": "^11.2.0",
     "@types/node": "^25.0.9",
-<<<<<<< HEAD
     "dockerode": "^4.0.9",
-=======
     "dotenv": "^17.2.3",
->>>>>>> main
     "fastify": "^5.7.1",
     "playwright": "^1.57.0",
     "socket.io": "^4.8.3",
