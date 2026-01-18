@@ -15,6 +15,7 @@
   "type": "commonjs",
   "dependencies": {
     "@fastify/cors": "^11.2.0",
+    "@google/generative-ai": "^0.24.1",
     "@types/node": "^25.0.9",
     "dotenv": "^17.2.3",
     "fastify": "^5.7.1",

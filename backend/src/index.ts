@@ -5,6 +5,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { Server } from 'socket.io';
 import { scanUrl } from './services/scanner';
+import { chat, ChatRequest } from './services/gemini';
 
 const fastify = Fastify({ logger: true });
 
@@ -25,14 +26,15 @@ const io = new Server(fastify.server, {
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
-    socket.on('start-scan', async (data: { url: string }) => {
-        console.log('Scan requested for:', data.url);
+    socket.on('start-scan', async (data: { url: string; deepScan?: boolean }) => {
 
         try {
             // Run the scan with progress updates
+            const deepScan = data.deepScan === true;
+            console.log(`Scan requested for: ${data.url} ${deepScan ? '(DEEP SCAN)' : ''}`);
             await scanUrl(data.url, (update) => {
                 socket.emit('scan-progress', update);
-            });
+            }, deepScan);
         } catch (error) {
             socket.emit('scan-error', { message: 'Scan failed' });
         }
@@ -49,17 +51,34 @@ fastify.get('/health', async () => {
 });
 
 // REST endpoint for manual scan trigger
-fastify.post<{ Body: { url: string } }>('/scan', async (request, reply) => {
-    const { url } = request.body;
+fastify.post<{ Body: { url: string; deepScan?: boolean } }>('/scan', async (request, reply) => {
+    const { url, deepScan = false } = request.body;
 
     if (!url) {
         return reply.status(400).send({ error: 'URL is required' });
     }
 
     const results: any[] = [];
-    await scanUrl(url, (update) => results.push(update));
+    await scanUrl(url, (update) => results.push(update), deepScan);
 
     return { results };
+});
+
+// Chat endpoint for AI assistance
+fastify.post<{ Body: ChatRequest }>('/api/chat', async (request, reply) => {
+    const { message, scanContext, conversationHistory } = request.body;
+
+    if (!message) {
+        return reply.status(400).send({ error: 'Message is required' });
+    }
+
+    const result = await chat({
+        message,
+        scanContext: scanContext || null,
+        conversationHistory: conversationHistory || [],
+    });
+
+    return result;
 });
 
 // Start server
