@@ -13,8 +13,13 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
     const [scannedUrl, setScannedUrl] = useState<string | null>(null);
     const scannerRef = useRef<Html5Qrcode | null>(null);
     const stoppingRef = useRef(false);
+    const hasInitializedRef = useRef(false); // Guard against double mount
 
     useEffect(() => {
+        // Guard against React Strict Mode double mount
+        if (hasInitializedRef.current) return;
+        hasInitializedRef.current = true;
+
         // Auto-start scanner when component mounts
         startScanner();
 
@@ -30,10 +35,18 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
                     // Ignore cleanup errors
                 }
             }
+            // Reset for potential remount
+            hasInitializedRef.current = false;
         };
     }, []);
 
     const startScanner = async () => {
+        // Prevent starting if already running
+        if (scannerRef.current) {
+            console.log('[QR] Scanner already exists, skipping');
+            return;
+        }
+
         setError(null);
         stoppingRef.current = false;
 
@@ -44,33 +57,45 @@ const QRScanner: React.FC<QRScannerProps> = ({ onScanSuccess }) => {
             await scanner.start(
                 { facingMode: "environment" },
                 { fps: 10, qrbox: { width: 250, height: 250 } },
-                (decodedText) => {
+                async (decodedText) => {
                     if (stoppingRef.current) return;
                     stoppingRef.current = true;
+
+                    console.log('[QR] Code detected:', decodedText);
 
                     // Show the scanned URL briefly before transitioning
                     setScannedUrl(decodedText);
 
-                    const finalize = () => {
-                        scannerRef.current = null;
-                        setScannerStarted(false);
-                        // Delay callback to show the URL
-                        setTimeout(() => {
-                            onScanSuccess(decodedText);
-                        }, 1500);
-                    };
-
-                    if (scanner.isScanning) {
-                        scanner.stop().then(finalize).catch(finalize);
-                    } else {
-                        finalize();
+                    // Stop the scanner immediately
+                    try {
+                        if (scanner.isScanning) {
+                            console.log('[QR] Stopping scanner...');
+                            await scanner.stop();
+                            console.log('[QR] Scanner stopped');
+                        }
+                    } catch (e) {
+                        console.error('[QR] Error stopping scanner:', e);
                     }
+
+                    // Clear the video element
+                    const videoContainer = document.getElementById('qr-reader-mobile');
+                    if (videoContainer) {
+                        videoContainer.innerHTML = '';
+                    }
+
+                    scannerRef.current = null;
+                    setScannerStarted(false);
+
+                    // Delay callback to show the URL
+                    setTimeout(() => {
+                        onScanSuccess(decodedText);
+                    }, 1500);
                 },
                 () => { } // ignore parse errors
             );
             setScannerStarted(true);
         } catch (err) {
-            console.error(err);
+            console.error('[QR] Camera error:', err);
             setError("Failed to access camera. Please grant camera permissions.");
         }
     };

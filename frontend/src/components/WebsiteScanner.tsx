@@ -246,17 +246,21 @@ const WebsiteScanner: React.FC<WebsiteScannerProps> = ({ initialUrl }) => {
     };
 
     const getVerdictColor = (score: number) => {
-        const maliciousPercent = calculateMaliciousPercentage(score);
-        if (maliciousPercent < 40) return { color: 'var(--success-green)', glow: 'var(--glow-green)' };
-        if (maliciousPercent < 60) return { color: 'var(--warning-gold)', glow: 'var(--glow-gold)' };
+        if (score >= 80) return { color: 'var(--success-green)', glow: 'var(--glow-green)' };
+        if (score >= 50) return { color: 'var(--warning-gold)', glow: 'var(--glow-gold)' };
         return { color: 'var(--danger-red)', glow: 'var(--glow-red)' };
     };
 
     const getVerdictMessage = (score: number) => {
-        const maliciousPercent = calculateMaliciousPercentage(score);
-        if (maliciousPercent < 40) return "This website doesn't seem malicious";
-        if (maliciousPercent < 60) return "This website seems a bit suspicious";
-        return "This website is likely to be malicious";
+        if (score >= 80) return "This website appears to be safe";
+        if (score >= 50) return "This website has some security concerns";
+        return "This website may be dangerous";
+    };
+
+    const getVerdictLabel = (score: number) => {
+        if (score >= 80) return "✅ Low Risk";
+        if (score >= 50) return "⚠️ Medium Risk";
+        return "🚨 High Risk";
     };
 
     return (
@@ -460,7 +464,7 @@ const WebsiteScanner: React.FC<WebsiteScannerProps> = ({ initialUrl }) => {
                                     letterSpacing: '1.5px',
                                     marginBottom: '8px'
                                 }}>
-                                    🚨 Risk Detected
+                                    {getVerdictLabel(reportData.score)}
                                 </p>
 
                                 <p style={{
@@ -468,7 +472,7 @@ const WebsiteScanner: React.FC<WebsiteScannerProps> = ({ initialUrl }) => {
                                     color: 'var(--text-main)',
                                     marginBottom: '8px'
                                 }}>
-                                    And the verdict is...
+                                    Security Score
                                 </p>
 
                                 <div
@@ -478,7 +482,7 @@ const WebsiteScanner: React.FC<WebsiteScannerProps> = ({ initialUrl }) => {
                                         textShadow: getVerdictColor(reportData.score).glow
                                     }}
                                 >
-                                    {calculateMaliciousPercentage(reportData.score)}%
+                                    {reportData.score}%
                                 </div>
 
                                 <p style={{
