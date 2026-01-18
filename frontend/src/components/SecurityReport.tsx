@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     CheckCircle,
     AlertTriangle,
@@ -12,9 +12,11 @@ import {
     Wifi,
     Shield,
     FileCheck,
-    Cookie
+    Cookie,
+    MessageCircle
 } from 'lucide-react';
 import { generatePDFReport } from '../utils/pdfGenerator';
+import ChatPanel from './ChatPanel';
 
 interface ReportData {
     url: string;
@@ -62,9 +64,28 @@ interface ReportData {
         secureCookies: number;
         hasIssues: boolean;
     };
+    // Vulnerability data
+    sensitiveFiles?: {
+        exposedFiles: { path: string; severity: string; description: string }[];
+        hasVulnerabilities: boolean;
+        criticalCount: number;
+        highCount: number;
+    };
+    versionDisclosure?: {
+        serverVersion: string | null;
+        poweredBy: string | null;
+        hasDisclosure: boolean;
+        riskLevel: string;
+    };
+    adminPanels?: {
+        foundPanels: { path: string; type: string }[];
+        hasExposedPanels: boolean;
+    };
 }
 
 const SecurityReport: React.FC<{ data: ReportData }> = ({ data }) => {
+    const [isChatOpen, setIsChatOpen] = useState(false);
+
     const getScoreColor = (score: number) => {
         if (score >= 80) return 'var(--success)';
         if (score >= 50) return 'var(--warning)';
@@ -270,13 +291,114 @@ const SecurityReport: React.FC<{ data: ReportData }> = ({ data }) => {
                 </div>
             </div>
 
+            {/* Vulnerabilities Section */}
+            {(data.sensitiveFiles?.hasVulnerabilities || data.versionDisclosure?.hasDisclosure || data.adminPanels?.hasExposedPanels) && (
+                <div style={{ marginTop: '24px' }}>
+                    <h3 style={{ fontSize: '1.2rem', marginBottom: '16px', color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <ShieldAlert size={24} />
+                        Vulnerabilities Detected
+                    </h3>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        {/* Exposed Files */}
+                        {data.sensitiveFiles?.hasVulnerabilities && (
+                            <div className="glass-card" style={{ padding: '16px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)' }}>
+                                <h4 style={{ marginBottom: '12px', color: 'var(--danger)' }}>
+                                    🚨 Exposed Sensitive Files ({data.sensitiveFiles.criticalCount} critical, {data.sensitiveFiles.highCount} high)
+                                </h4>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {data.sensitiveFiles.exposedFiles.slice(0, 5).map((file, i) => (
+                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                                            <code style={{ color: 'var(--primary)' }}>{file.path}</code>
+                                            <span style={{
+                                                color: file.severity === 'critical' ? 'var(--danger)' :
+                                                    file.severity === 'high' ? 'var(--warning)' : 'var(--text-muted)',
+                                                textTransform: 'uppercase',
+                                                fontSize: '0.8rem'
+                                            }}>{file.severity}</span>
+                                        </div>
+                                    ))}
+                                    {data.sensitiveFiles.exposedFiles.length > 5 && (
+                                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                            +{data.sensitiveFiles.exposedFiles.length - 5} more...
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Version Disclosure */}
+                        {data.versionDisclosure?.hasDisclosure && (
+                            <div className="glass-card" style={{ padding: '16px', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid var(--warning)' }}>
+                                <h4 style={{ marginBottom: '12px', color: 'var(--warning)' }}>
+                                    ⚠️ Version Information Leaked
+                                </h4>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.9rem' }}>
+                                    {data.versionDisclosure.serverVersion && (
+                                        <div>Server: <code>{data.versionDisclosure.serverVersion}</code></div>
+                                    )}
+                                    {data.versionDisclosure.poweredBy && (
+                                        <div>Powered By: <code>{data.versionDisclosure.poweredBy}</code></div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Admin Panels */}
+                        {data.adminPanels?.hasExposedPanels && (
+                            <div className="glass-card" style={{ padding: '16px', background: 'rgba(251, 191, 36, 0.1)', border: '1px solid var(--warning)' }}>
+                                <h4 style={{ marginBottom: '12px', color: 'var(--warning)' }}>
+                                    📍 Exposed Endpoints ({data.adminPanels.foundPanels.length} found)
+                                </h4>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                    {data.adminPanels.foundPanels.map((panel, i) => (
+                                        <span key={i} style={{
+                                            background: 'rgba(255,255,255,0.1)',
+                                            padding: '4px 8px',
+                                            borderRadius: '4px',
+                                            fontSize: '0.85rem'
+                                        }}>
+                                            <code>{panel.path}</code>
+                                            <span style={{ color: 'var(--text-muted)', marginLeft: '4px' }}>({panel.type})</span>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Download Button */}
-            <div style={{ marginTop: '32px', textAlign: 'center' }}>
+            <div style={{ marginTop: '32px', textAlign: 'center', display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap' }}>
                 <button className="neon-button" onClick={handleDownloadPDF} style={{ background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid var(--glass-border)', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
                     <Download size={18} />
                     Download PDF Report
                 </button>
+                <button
+                    className="neon-button"
+                    onClick={() => setIsChatOpen(true)}
+                    style={{
+                        background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                        color: 'black',
+                        border: 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontWeight: 600
+                    }}
+                >
+                    <MessageCircle size={18} />
+                    Ask AI About Results
+                </button>
             </div>
+
+            {/* AI Chat Panel */}
+            <ChatPanel
+                scanContext={data}
+                isOpen={isChatOpen}
+                onClose={() => setIsChatOpen(false)}
+            />
         </div>
     );
 };

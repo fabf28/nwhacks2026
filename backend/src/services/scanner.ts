@@ -7,6 +7,9 @@ import { checkPorts } from './portScan';
 import { checkIpReputation } from './ipReputation';
 import { checkSecurityHeaders } from './securityHeaders';
 import { checkCookieSecurity } from './cookieSecurity';
+import { checkSensitiveFiles } from './sensitiveFiles';
+import { checkVersionDisclosure } from './versionDisclosure';
+import { checkAdminPanels } from './adminPanels';
 import { calculateScore, ScanResult } from './scoring';
 
 export interface ProgressUpdate {
@@ -19,6 +22,7 @@ export interface ProgressUpdate {
 export async function scanUrl(
   url: string,
   onProgress: (update: ProgressUpdate) => void,
+  deepScan: boolean = false,
 ): Promise<ScanResult> {
   const results: ScanResult = {
     url,
@@ -361,6 +365,126 @@ export async function scanUrl(
       status: 'warning',
     });
   }
+
+  // Deep Scan: Vulnerability Checks (only if enabled)
+  if (deepScan) {
+    // Step 11: Vulnerability Scanning - Sensitive Files
+    onProgress({
+      step: 'sensitiveFiles',
+      message: 'Scanning for exposed sensitive files...',
+      status: 'pending',
+    });
+
+    try {
+      const sensitiveFilesData = await checkSensitiveFiles(url);
+      results.checks.sensitiveFiles = sensitiveFilesData;
+
+      if (sensitiveFilesData.criticalCount > 0) {
+        onProgress({
+          step: 'sensitiveFiles',
+          message: `CRITICAL: ${sensitiveFilesData.criticalCount} sensitive files exposed!`,
+          status: 'error',
+          data: sensitiveFilesData,
+        });
+      } else if (sensitiveFilesData.hasVulnerabilities) {
+        onProgress({
+          step: 'sensitiveFiles',
+          message: `Found ${sensitiveFilesData.exposedFiles.length} exposed files`,
+          status: 'warning',
+          data: sensitiveFilesData,
+        });
+      } else {
+        onProgress({
+          step: 'sensitiveFiles',
+          message: 'No sensitive files exposed',
+          status: 'success',
+          data: sensitiveFilesData,
+        });
+      }
+    } catch (e) {
+      onProgress({
+        step: 'sensitiveFiles',
+        message: 'Could not complete file scan',
+        status: 'warning',
+      });
+    }
+
+    // Step 12: Version Disclosure
+    onProgress({
+      step: 'versionDisclosure',
+      message: 'Checking for version disclosure...',
+      status: 'pending',
+    });
+
+    try {
+      const versionData = await checkVersionDisclosure(url);
+      results.checks.versionDisclosure = versionData;
+
+      if (versionData.riskLevel === 'high') {
+        onProgress({
+          step: 'versionDisclosure',
+          message: `Version info leaked: ${versionData.poweredBy || versionData.serverVersion}`,
+          status: 'error',
+          data: versionData,
+        });
+      } else if (versionData.hasDisclosure) {
+        onProgress({
+          step: 'versionDisclosure',
+          message: `Server: ${versionData.serverVersion || 'Hidden'}`,
+          status: 'warning',
+          data: versionData,
+        });
+      } else {
+        onProgress({
+          step: 'versionDisclosure',
+          message: 'No version info disclosed',
+          status: 'success',
+          data: versionData,
+        });
+      }
+    } catch (e) {
+      onProgress({
+        step: 'versionDisclosure',
+        message: 'Could not check version disclosure',
+        status: 'warning',
+      });
+    }
+
+    // Step 13: Admin Panel Detection
+    onProgress({
+      step: 'adminPanels',
+      message: 'Scanning for exposed admin panels...',
+      status: 'pending',
+    });
+
+    try {
+      const adminData = await checkAdminPanels(url);
+      results.checks.adminPanels = adminData;
+
+      if (adminData.hasExposedPanels) {
+        const types = [...new Set(adminData.foundPanels.map(p => p.type))];
+        onProgress({
+          step: 'adminPanels',
+          message: `Found ${adminData.foundPanels.length} endpoints (${types.join(', ')})`,
+          status: 'warning',
+          data: adminData,
+        });
+      } else {
+        onProgress({
+          step: 'adminPanels',
+          message: 'No exposed admin panels found',
+          status: 'success',
+          data: adminData,
+        });
+      }
+    } catch (e) {
+      onProgress({
+        step: 'adminPanels',
+        message: 'Could not scan for admin panels',
+        status: 'warning',
+      });
+    }
+  } // End of deepScan block
 
   // Final Step: Calculate final score
   const finalScore = calculateScore(results);
